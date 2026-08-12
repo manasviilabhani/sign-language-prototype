@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Gloss tests</title>
+<style>body{font:13px ui-monospace,monospace;padding:10px}.r{margin-bottom:10px}
+.e{color:#666}.g{font-weight:700}.t{color:#06c;font-size:12px}</style></head><body>
+<div id="o"></div>
+<script src="signs.js"></script><script src="asl.js"></script>
+<script>
+const cases = [
+  'where is the water',
+  'what is your name',
+  'I love sign language',
+  "I don't understand",
+  'yesterday I went to school',
+  'do you want more water',
+  'are you deaf',
+  'I am happy',
+  'thank you',
+  'tomorrow I will help my friend',
+  'the people are eating food',
+  'no',
+];
+const o = document.getElementById('o');
+for (const c of cases) {
+  const r = window.SLASL.toGloss(c);
+  const d = document.createElement('div'); d.className = 'r';
+  d.innerHTML = '<div class="e">EN: ' + r.english + '</div><div class="g">GL: ' +
+    r.glosses.map(g => (g.display||g.gloss) + (g.marker ? '['+g.marker+']' : '')).join(' ') +
+    ' (' + r.type + ')</div>' +
+    r.trace.map(t => '<div class="t">· ' + t.rule + ': ' + t.detail + '</div>').join('');
+  o.appendChild(d);
+}
+</script></body></html>

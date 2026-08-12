@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Pose sheet</title>
+<style>
+  body { margin:0; background:#fff; font:13px system-ui; color:#111; }
+  .grid { display:grid; grid-template-columns:repeat(9, 120px); gap:2px; padding:8px; }
+  .cell { text-align:center; }
+  canvas { display:block; background:#fafafa; border:1px solid #eee; }
+  .lbl { font-weight:700; padding:2px 0 4px; }
+</style>
+</head>
+<body>
+<div class="grid" id="grid"></div>
+<script src="signs.js"></script>
+<script src="face.js"></script>
+<script src="hand.js"></script>
+<script>
+const names = Object.keys(window.SL.POSES);
+const C = { skin:'#edbb93', skinEdge:'#a9683c' };
+for (const n of names) {
+  const cell = document.createElement('div');
+  cell.className = 'cell';
+  const lbl = document.createElement('div');
+  lbl.className = 'lbl';
+  lbl.textContent = n;
+  const cv = document.createElement('canvas');
+  cv.width = 120; cv.height = 150;
+  cell.appendChild(lbl); cell.appendChild(cv);
+  document.getElementById('grid').appendChild(cell);
+  const ctx = cv.getContext('2d');
+  ctx.translate(60, 130);
+  ctx.scale(0.62, 0.62);
+  const p = window.SL.POSES[n];
+  window.SLPlayer.drawHand(ctx, C, p, 0, 0, p.r === undefined ? 0 : p.r, 1);
+}
+document.title = 'poses:' + names.length;
+</script>
+</body>
+</html>

@@ -1,0 +1,76 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Filmstrip</title>
+<style>
+  body { margin:0; background:#fff; font:12px system-ui; color:#111; }
+  .strip { display:flex; flex-wrap:wrap; gap:2px; padding:6px; }
+  .f { text-align:center; }
+  canvas { display:block; background:#fafafa; border:1px solid #eee; }
+  .cap { font-weight:600; padding:2px; }
+  h3 { margin:10px 0 2px 8px; font-size:13px; }
+</style>
+</head>
+<body>
+<div id="out"></div>
+<script>
+window.__TEST__ = true;
+</script>
+<script src="signs.js"></script>
+<script src="face.js"></script>
+<script src="hand.js"></script>
+<script>
+// Minimal DOM the app expects, so app.js can initialise headlessly.
+const ids = ['stage','now','nowKind','nowFace','status','plan','interim','transcript','input','mic','micNote','lang','signBtn','replay','speed','speedVal','vocab','vocabCount'];
+for (const id of ids) {
+  if (document.getElementById(id)) continue;
+  const el = document.createElement(id === 'stage' ? 'canvas' : (id === 'lang' || id === 'speed' ? 'input' : 'div'));
+  el.id = id; el.style.display = 'none';
+  document.body.appendChild(el);
+}
+</script>
+<script src="app.js"></script>
+<script>
+const C = { skin:'#edbb93', skinEdge:'#a9683c', skinShade:'#d79c72', shirt:'#6366f1',
+            shirtDark:'#4338ca', hair:'#3b2a24', brow:'#4a352c', line:'#a9683c',
+            sclera:'#fff', iris:'#6b4b32', pupil:'#221812', mouth:'#9c4f47',
+            mouthInner:'#6d2f2c', teeth:'#fdfaf7', tongue:'#cf6c74', blush:'rgba(226,120,110,0.3)' };
+const P = window.SLPlayer;
+const phrases = ['where is the water', 'no', 'I am happy', 'thank you'];
+const out = document.getElementById('out');
+
+for (const phrase of phrases) {
+  const h = document.createElement('h3');
+  h.textContent = phrase + '  →  ' + window.SLApp.tokenize(phrase).map(t => t.text + '[' + t.kind + ']').join(' ');
+  out.appendChild(h);
+  const strip = document.createElement('div');
+  strip.className = 'strip';
+  out.appendChild(strip);
+
+  const { tl } = window.SLApp.buildTimeline(phrase);
+  const N = 8;
+  for (let i = 0; i < N; i++) {
+    const t = (tl.duration * i) / (N - 1);
+    const wrap = document.createElement('div');
+    wrap.className = 'f';
+    const cap = document.createElement('div');
+    cap.className = 'cap';
+    const item = tl.items[tl.itemAt(t)];
+    cap.textContent = Math.round(t) + 'ms ' + (item ? item.label + ' /' + item.face : '');
+    const cv = document.createElement('canvas');
+    cv.width = 150; cv.height = 195;
+    wrap.appendChild(cap); wrap.appendChild(cv);
+    strip.appendChild(wrap);
+
+    const ctx = cv.getContext('2d');
+    ctx.scale(150 / P.STAGE_W, 195 / P.STAGE_H);
+    const s = tl.sample(t);
+    window.SLFace.drawAvatar(ctx, C, window.SLFace.vecToFace(s.v.slice(P.POSE_LEN)), 0);
+    P.drawArm(ctx, C, s.x, s.y);
+    P.drawHand(ctx, C, P.vecToPose(s.v.slice(0, P.POSE_LEN)), s.x, s.y, s.r, P.HAND_SCALE);
+  }
+}
+</script>
+</body>
+</html>
