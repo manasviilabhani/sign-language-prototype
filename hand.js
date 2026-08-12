@@ -71,6 +71,56 @@ function lerpVec(a, b, t) {
 }
 
 const smootherstep = (t) => t * t * t * (t * (t * 6 - 15) + 10);
+const clamp01 = (t) => (t < 0 ? 0 : t > 1 ? 1 : t);
+
+/* Per-digit timing.
+ *
+ * Every number in the pose vector used to share one interpolation parameter,
+ * so all four fingers and the thumb arrived at the new handshape on exactly
+ * the same frame. That is the single thing that made the signing read as
+ * mechanical: real hands do not move in lockstep, the digits arrive in a
+ * ripple. Each finger now gets its own slice of the transition — index first,
+ * pinky last — so a handshape assembles instead of snapping into place.
+ *
+ * The spread angle travels with its own finger rather than with the group,
+ * which is what makes a hand opening to 5 splay outwards progressively.
+ */
+const DIGIT_LEAD = [0, 0.05, 0.10, 0.15, 0.07];  // index, middle, ring, pinky, thumb
+const LEAD_MAX = 0.15;
+
+// A stroke is faster than the recovery that follows it — a signer drives to
+// the shape and eases out of it, rather than moving symmetrically.
+const ARC = 0.055;       // perpendicular bulge, as a fraction of travel
+const STROKE_BIAS = 0.42;
+const biased = (t) => (t < STROKE_BIAS
+  ? smootherstep(t / STROKE_BIAS) * 0.55
+  : 0.55 + smootherstep((t - STROKE_BIAS) / (1 - STROKE_BIAS)) * 0.45);
+
+function digitEases(raw) {
+  const out = [];
+  for (let i = 0; i < 5; i++) {
+    out.push(biased(clamp01((raw - DIGIT_LEAD[i]) / (1 - LEAD_MAX))));
+  }
+  return out;
+}
+
+/* Interpolate one hand's 19 numbers with a separate ease per digit. Layout is
+ * 4 fingers x 3 joints, then 4 spreads, then 2 thumb joints and a thumb
+ * spread — see POSE_LEN. */
+function lerpHand(a, b, out, off, te) {
+  for (let f = 0; f < 4; f++) {
+    const t = te[f];
+    for (let j = 0; j < 3; j++) {
+      const k = off + f * 3 + j;
+      out[k] = a[k] + (b[k] - a[k]) * t;
+    }
+    const s = off + 12 + f;
+    out[s] = a[s] + (b[s] - a[s]) * t;
+  }
+  for (let k = off + 16; k < off + 19; k++) {
+    out[k] = a[k] + (b[k] - a[k]) * te[4];
+  }
+}
 // Slight overshoot on arrival, so a sign settles rather than stopping dead.
 const OVER = 1.05;
 const easeOutBack = (t) => 1 + (OVER + 1) * Math.pow(t - 1, 3) + OVER * Math.pow(t - 1, 2);
@@ -380,7 +430,13 @@ function palette() {
  * Timeline
  * ---------------------------------------------------------------- */
 
-const TRANS = 150; // ms of travel between two held keyframes
+/* Travel time between two held keyframes, scaled by how far the hand actually
+ * goes. A single flat figure made a two-inch move look sluggish and a
+ * cross-body sweep look teleported — distance is most of what makes timing
+ * read as physical. */
+const TRANS_MIN = 90;
+const TRANS_MAX = 260;
+const TRANS_PER_UNIT = 1.1;
 
 class Timeline {
   constructor() {
@@ -411,7 +467,13 @@ class Timeline {
       const r2 = f.r2 === undefined ? REST_HAND_ROT : f.r2;
       const fc = f.fc ? F.FACES[f.fc] || base : base;
       const v = poseToVec(p).concat(poseToVec(p2), F.faceToVec(fc));
-      const start = this.keys.length ? this.duration + TRANS : 0;
+      let trans = 0;
+      if (this.keys.length) {
+        const prev = this.keys[this.keys.length - 1];
+        const d = Math.hypot(f.x - prev.x, f.y - prev.y);
+        trans = Math.min(TRANS_MAX, TRANS_MIN + d * TRANS_PER_UNIT);
+      }
+      const start = this.keys.length ? this.duration + trans : 0;
       // Palm facing rides alongside the wrist rather than inside the pose
       // vector: it is a property of how the hand is turned, not of its shape.
       const pf = f.pm === undefined ? basePalm : f.pm;
@@ -449,10 +511,35 @@ class Timeline {
     const uPos = easeOutBack(raw);
     const uRot = easeLag(raw);
     const mix = (p, e) => a[p] + (b[p] - a[p]) * e;
+    // Digits ripple; the face keeps the plain ease, since expression is not
+    // articulated the way a hand is.
+    const te = digitEases(raw);
+    const v = lerpVec(a.v, b.v, u);
+    lerpHand(a.v, b.v, v, 0, te);
+    lerpHand(a.v, b.v, v, POSE_LEN, te);
+
+    /* Hands travel in arcs, not straight lines. Bulge the path perpendicular
+     * to the direction of travel, peaking mid-move and scaled to how far the
+     * hand is going, so short moves stay direct and long ones sweep. */
+    const arc = Math.sin(Math.PI * clamp01(raw)) * ARC;
+    const bow = (kx, ky) => {
+      const dx = b[kx] - a[kx];
+      const dy = b[ky] - a[ky];
+      const d = Math.hypot(dx, dy);
+      // Below a few units the "travel" is a hold or a tremor, not a path.
+      if (d < 24) return [0, 0];
+      const s = arc * Math.min(d, 180);
+      return [-(dy / d) * s, (dx / d) * s];
+    };
+    const bowR = bow('x', 'y');
+    const bowL = bow('x2', 'y2');
+
     return {
-      v: lerpVec(a.v, b.v, u),
-      x: mix('x', uPos), y: mix('y', uPos), z: mix('z', uPos), r: mix('r', uRot),
-      x2: mix('x2', uPos), y2: mix('y2', uPos), z2: mix('z2', uPos), r2: mix('r2', uRot),
+      v,
+      x: mix('x', uPos) + bowR[0], y: mix('y', uPos) + bowR[1],
+      z: mix('z', uPos), r: mix('r', uRot),
+      x2: mix('x2', uPos) - bowL[0], y2: mix('y2', uPos) + bowL[1],
+      z2: mix('z2', uPos), r2: mix('r2', uRot),
       // Crossing zero narrows the hand to its edge and opens it the other way,
       // which is what turning the palm over actually looks like from the front.
       pf: mix('pf', uRot), pf2: mix('pf2', uRot),

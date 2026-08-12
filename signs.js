@@ -215,12 +215,12 @@ const VOCAB = {
       kf('O', at('spell', 8, -8), -4, 220, 'negR'),
     ],
   },
-  I: { frames: [kf('POINT', at('chest', 6, -4), 74, 420)] },
+  I: { frames: [kf('POINT', at('chest', 22, -20), 66, 170), kf('POINT', at('chest', 6, -4), 74, 400)] },
   ME: { alias: 'I' },
-  MY: { frames: [kf('FLAT', at('chest', 4, -2), 76, 420)] },
+  MY: { frames: [kf('FLAT', at('chest', 26, -22), 68, 170), kf('FLAT', at('chest', 4, -2), 76, 400)] },
   MINE: { alias: 'MY' },
-  YOU: { frames: [kf('POINT', at('spell', 34, -6), -6, 420)] },
-  YOUR: { frames: [kf('FLAT', at('spell', 34, -6), -6, 420)] },
+  YOU: { frames: [kf('POINT', at('spell', 8, -2), -6, 160), kf('POINT', at('spell', 34, -6), -6, 400)] },
+  YOUR: { frames: [kf('FLAT', at('spell', 6, -2), -6, 160), kf('FLAT', at('spell', 34, -6), -6, 400)] },
   WE: {
     frames: [kf('POINT', at('chest', 26, -30), 40, 200), kf('POINT', at('chest', -26, -30), -40, 260)],
   },
@@ -515,7 +515,10 @@ function mk(shape, loc, mv, o) {
                [h1, 6, -4, 9, D * 0.45], [h2, -6, 4, -9, D * 0.6]]; break;
     case 'hold':
     default:
-      steps = [[h1, 0, 0, 0, D * 1.5]];
+      // Even a held sign is *placed*. A single frozen keyframe has no arrival
+      // and no settle, so it reads as a paused video rather than a signer
+      // holding a shape: the hand comes in slightly high and drops onto it.
+      steps = [[h1, 0, -11, -4, D * 0.55], [h2, 0, 0, 0, D * 1.15]];
   }
 
   return steps.map(function (st, i) {
