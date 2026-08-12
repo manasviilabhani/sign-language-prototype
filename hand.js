@@ -68,6 +68,11 @@ function lerpVec(a, b, t) {
 }
 
 const smootherstep = (t) => t * t * t * (t * (t * 6 - 15) + 10);
+// Slight overshoot on arrival, so a sign settles rather than stopping dead.
+const OVER = 1.05;
+const easeOutBack = (t) => 1 + (OVER + 1) * Math.pow(t - 1, 3) + OVER * Math.pow(t - 1, 2);
+// Rotation lags translation by a fraction of the transition.
+const easeLag = (t) => smootherstep(Math.max(0, Math.min(1, (t - 0.18) / 0.82)));
 
 /* ---------------------------------------------------------------- *
  * Two-bone arm IK — keeps the wrist attached to a shoulder
@@ -98,24 +103,42 @@ function solveArm(sh, wx, wy, side) {
   const h = Math.sqrt(Math.max(0, UPPER * UPPER - a * a));
   const mx = sh.x + ux * a;
   const my = sh.y + uy * a;
-  return { x: mx - side * uy * h, y: my + side * ux * h };
+  const e1 = { x: mx - uy * h, y: my + ux * h };
+  const e2 = { x: mx + uy * h, y: my - ux * h };
+  // Prefer the lower elbow, and break near-ties by swinging away from the body.
+  if (Math.abs(e1.y - e2.y) < 12) return (e1.x - sh.x) * side > (e2.x - sh.x) * side ? e2 : e1;
+  return e1.y > e2.y ? e1 : e2;
 }
 
 /* ---------------------------------------------------------------- *
  * Drawing
  * ---------------------------------------------------------------- */
 
-function drawArm(ctx, C, wx, wy, sh, side) {
-  const shoulder = sh || SHOULDER;
-  const e = solveArm(shoulder, wx, wy, side === undefined ? 1 : side);
+// Soft shadow pass: draw the same geometry blurred and offset underneath, so
+// hands read as sitting in front of the body rather than pasted onto it.
+const CAN_BLUR = (function () {
+  try {
+    const c = document.createElement('canvas').getContext('2d');
+    c.filter = 'blur(2px)';
+    return c.filter === 'blur(2px)';
+  } catch (e) { return false; }
+})();
+
+function shadowed(ctx, dx, dy, blur, alpha, draw) {
   ctx.save();
+  if (CAN_BLUR) ctx.filter = 'blur(' + blur + 'px)';
+  ctx.globalAlpha = alpha;
+  ctx.translate(dx, dy);
+  draw(ctx, { skin: '#000', skinEdge: '#000', skinLight: '#000', shirt: '#000',
+              shirtDark: '#000', skinShade: '#000' });
+  ctx.restore();
+}
+
+function armGeom(ctx, C, shoulder, e, wx, wy) {
   ctx.lineCap = 'round';
-  // Each bone is its own stroke: a single polyline with a round join spikes
-  // into a wedge when the elbow angle gets sharp.
-  // Sleeve to the elbow, bare forearm below it.
   const bones = [
-    [shoulder, e, 30, C.shirtDark, 26, C.shirt],
-    [e, { x: wx, y: wy }, 24, C.skinShade, 20, C.skin],
+    [shoulder, e, 31, C.shirtDark, 27, C.shirt],
+    [e, { x: wx, y: wy }, 25, C.skinShade, 21, C.skin],
   ];
   for (const [a, b, wOut, cOut, wIn, cIn] of bones) {
     for (const [w, col] of [[wOut, cOut], [wIn, cIn]]) {
@@ -129,52 +152,95 @@ function drawArm(ctx, C, wx, wy, sh, side) {
   }
   ctx.fillStyle = C.skin;
   ctx.beginPath();
-  ctx.arc(e.x, e.y, 10, 0, Math.PI * 2);
+  ctx.arc(e.x, e.y, 10.5, 0, Math.PI * 2);
   ctx.fill();
+}
+
+function drawArm(ctx, C, wx, wy, sh, side) {
+  const shoulder = sh || SHOULDER;
+  const e = solveArm(shoulder, wx, wy, side === undefined ? 1 : side);
+  shadowed(ctx, 5, 11, 7, 0.22, (c, K) => armGeom(c, K, shoulder, e, wx, wy));
+
+  ctx.save();
+  armGeom(ctx, C, shoulder, e, wx, wy);
+
+  // forearm highlight along the top edge gives the limb volume
+  const ang = Math.atan2(wy - e.y, wx - e.x);
+  const nx = Math.sin(ang) * 5.5;
+  const ny = -Math.cos(ang) * 5.5;
+  ctx.strokeStyle = C.skinLight;
+  ctx.globalAlpha = 0.5;
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(e.x + nx, e.y + ny);
+  ctx.lineTo(wx + nx, wy + ny);
+  ctx.stroke();
   ctx.restore();
 }
 
-function drawChain(ctx, C, x, y, baseAngle, flex, lens, widths, rate) {
+// One finger: tapered segments with joint creases and a lit top edge.
+function drawChain(ctx, C, x, y, baseAngle, flex, lens, widths, rate, detail) {
   let cx = x;
   let cy = y;
   let a = baseAngle;
-  let acc = 0;
   const pts = [{ x: cx, y: cy }];
+  const angs = [];
   for (let i = 0; i < lens.length; i++) {
-    acc += Math.abs(flex[i]);
     a += rad(flex[i] * rate);
     const shorten = 1 - SHORTEN * Math.min(1, Math.abs(flex[i]) / 95);
     const L = lens[i] * shorten;
     cx += Math.sin(a) * L;
     cy -= Math.cos(a) * L;
     pts.push({ x: cx, y: cy });
+    angs.push(a);
   }
 
-  // outline pass then fill pass, so joints read as one solid digit
-  for (const pass of [0, 1]) {
-    ctx.strokeStyle = pass === 0 ? C.skinEdge : C.skin;
-    for (let i = 0; i < lens.length; i++) {
-      ctx.lineWidth = widths[i] + (pass === 0 ? 3.5 : 0);
-      ctx.lineCap = 'round';
+  ctx.lineCap = 'round';
+  // rim
+  ctx.strokeStyle = C.skinEdge;
+  for (let i = 0; i < lens.length; i++) {
+    ctx.lineWidth = widths[i] + 3;
+    ctx.beginPath();
+    ctx.moveTo(pts[i].x, pts[i].y);
+    ctx.lineTo(pts[i + 1].x, pts[i + 1].y);
+    ctx.stroke();
+  }
+  // body, tapering toward the tip
+  for (let i = 0; i < lens.length; i++) {
+    const g = ctx.createLinearGradient(pts[i].x - 6, pts[i].y, pts[i].x + 8, pts[i].y);
+    g.addColorStop(0, C.skinLight);
+    g.addColorStop(0.55, C.skin);
+    g.addColorStop(1, C.skinShade);
+    ctx.strokeStyle = g;
+    ctx.lineWidth = widths[i];
+    ctx.beginPath();
+    ctx.moveTo(pts[i].x, pts[i].y);
+    ctx.lineTo(pts[i + 1].x, pts[i + 1].y);
+    ctx.stroke();
+  }
+
+  if (detail !== false) {
+    // knuckle creases
+    ctx.strokeStyle = C.crease;
+    ctx.globalAlpha = 0.5;
+    ctx.lineWidth = 1.4;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const w = widths[i] * 0.42;
+      const p = pts[i];
+      const pa = angs[i - 1];
       ctx.beginPath();
-      ctx.moveTo(pts[i].x, pts[i].y);
-      ctx.lineTo(pts[i + 1].x, pts[i + 1].y);
+      ctx.moveTo(p.x - Math.cos(pa) * w, p.y - Math.sin(pa) * w);
+      ctx.lineTo(p.x + Math.cos(pa) * w, p.y + Math.sin(pa) * w);
       ctx.stroke();
     }
+    ctx.globalAlpha = 1;
   }
   return pts[pts.length - 1];
 }
 
-// `mirror` draws the same pose data as a left hand.
-function drawHand(ctx, C, pose, x, y, rot, scale, mirror) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(rad(mirror ? -rot : rot));
-  ctx.scale(mirror ? -scale : scale, scale);
-
+function handGeom(ctx, C, pose, detail) {
   const halfW = GEO.palmW / 2;
 
-  // palm
   ctx.beginPath();
   ctx.moveTo(-halfW + 4, 6);
   ctx.quadraticCurveTo(-halfW - 4, -30, -halfW + 2, -GEO.palmH + 8);
@@ -183,29 +249,95 @@ function drawHand(ctx, C, pose, x, y, rot, scale, mirror) {
   ctx.quadraticCurveTo(halfW + 4, -GEO.palmH + 12, halfW + 2, -34);
   ctx.quadraticCurveTo(halfW + 2, 4, halfW - 14, 10);
   ctx.closePath();
-  ctx.fillStyle = C.skin;
+
+  const pg = ctx.createLinearGradient(-halfW, -GEO.palmH, halfW, 10);
+  pg.addColorStop(0, C.skinLight);
+  pg.addColorStop(0.5, C.skin);
+  pg.addColorStop(1, C.skinShade);
+  ctx.fillStyle = pg;
   ctx.strokeStyle = C.skinEdge;
   ctx.lineWidth = 3.5;
   ctx.fill();
   ctx.stroke();
 
-  // fingers, pinky first so the index reads on top
-  for (let i = 3; i >= 0; i--) {
-    const g = GEO.fingers[i];
-    drawChain(ctx, C, g.bx, g.by, rad(pose.s[i]), pose.f[i], g.len, g.w, BEND_RATE);
+  if (detail !== false) {
+    // palm creases and the thenar pad
+    ctx.save();
+    ctx.globalAlpha = 0.32;
+    ctx.strokeStyle = C.crease;
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(halfW - 26, -GEO.palmH + 22);
+    ctx.quadraticCurveTo(0, -GEO.palmH + 34, -halfW + 14, -GEO.palmH + 26);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(halfW - 14, -22);
+    ctx.quadraticCurveTo(halfW - 30, -6, -halfW + 16, -2);
+    ctx.stroke();
+    ctx.restore();
   }
 
-  // thumb: base angle swings out from the palm, flexion folds it back in
-  const t = GEO.thumb;
-  drawChain(ctx, C, t.bx, t.by, rad(pose.ts), [-pose.th[0], -pose.th[1]], t.len, t.w, THUMB_RATE);
+  for (let i = 3; i >= 0; i--) {
+    const g = GEO.fingers[i];
+    drawChain(ctx, C, g.bx, g.by, rad(pose.s[i]), pose.f[i], g.len, g.w, BEND_RATE, detail);
+  }
 
-  // wrist cuff
+  const t = GEO.thumb;
+  drawChain(ctx, C, t.bx, t.by, rad(pose.ts), [-pose.th[0], -pose.th[1]], t.len, t.w, THUMB_RATE, detail);
+
   ctx.beginPath();
   ctx.ellipse(0, 10, halfW - 12, 9, 0, 0, Math.PI * 2);
   ctx.fillStyle = C.skinEdge;
   ctx.fill();
+}
 
+// `mirror` draws the same pose data as a left hand.
+function drawHand(ctx, C, pose, x, y, rot, scale, mirror) {
+  const place = (c) => {
+    c.translate(x, y);
+    c.rotate(rad(mirror ? -rot : rot));
+    c.scale(mirror ? -scale : scale, scale);
+  };
+
+  shadowed(ctx, 6, 13, 8, 0.26, (c, K) => { place(c); handGeom(c, K, pose, false); });
+
+  ctx.save();
+  place(ctx);
+  handGeom(ctx, C, pose, true);
   ctx.restore();
+}
+
+function palette() {
+  const cs = getComputedStyle(document.documentElement);
+  const g = (n, f) => (cs.getPropertyValue(n) || '').trim() || f;
+  return {
+    skin: g('--skin', '#e9b78e'),
+    skinEdge: g('--skin-edge', '#9b6136'),
+    skinShade: g('--skin-shade', '#d29a6f'),
+    skinLight: g('--skin-light', '#f7d3b2'),
+    crease: g('--crease', '#8a5230'),
+    shirt: g('--shirt', '#6366f1'),
+    shirtDark: g('--shirt-dark', '#4338ca'),
+    hair: g('--hair', '#3b2a24'),
+    hairLight: g('--hair-light', '#5c443a'),
+    hairDark: g('--hair-dark', '#241812'),
+    shirtLight: g('--shirt-light', '#8b8ef7'),
+    skinDeep: g('--skin-deep', '#7d4526'),
+    lash: g('--lash', '#3a2a22'),
+    irisLight: g('--iris-light', '#9a7350'),
+    lipTop: g('--lip-top', '#7d3b36'),
+    lipBottom: g('--lip-bottom', '#c4756c'),
+    brow: g('--brow', '#3b2a24'),
+    line: g('--line', '#6b4a33'),
+    sclera: g('--sclera', '#ffffff'),
+    iris: g('--iris', '#5b4636'),
+    pupil: g('--pupil', '#1c1411'),
+    mouth: g('--mouth', '#8f4a44'),
+    mouthInner: g('--mouth-inner', '#6d2f2c'),
+    teeth: g('--teeth', '#fbf7f4'),
+    tongue: g('--tongue', '#c2606a'),
+    blush: g('--blush', 'rgba(226,120,110,0.35)'),
+};
 }
 
 /* ---------------------------------------------------------------- *
@@ -268,11 +400,14 @@ class Timeline {
     const b = k[hi];
     const span = b.t - a.t;
     const u = span <= 0 ? 0 : smootherstep((t - a.t) / span);
-    const mix = (p) => a[p] + (b[p] - a[p]) * u;
+    const raw = span <= 0 ? 0 : (t - a.t) / span;
+    const uPos = easeOutBack(raw);
+    const uRot = easeLag(raw);
+    const mix = (p, e) => a[p] + (b[p] - a[p]) * e;
     return {
       v: lerpVec(a.v, b.v, u),
-      x: mix('x'), y: mix('y'), r: mix('r'),
-      x2: mix('x2'), y2: mix('y2'), r2: mix('r2'),
+      x: mix('x', uPos), y: mix('y', uPos), r: mix('r', uRot),
+      x2: mix('x2', uPos), y2: mix('y2', uPos), r2: mix('r2', uRot),
     };
   }
 
@@ -368,26 +503,7 @@ class Player {
   }
 
   colors() {
-    const cs = getComputedStyle(document.documentElement);
-    const g = (n, f) => (cs.getPropertyValue(n) || '').trim() || f;
-    return {
-      skin: g('--skin', '#e9b78e'),
-      skinEdge: g('--skin-edge', '#9b6136'),
-      skinShade: g('--skin-shade', '#d29a6f'),
-      shirt: g('--shirt', '#6366f1'),
-      shirtDark: g('--shirt-dark', '#4338ca'),
-      hair: g('--hair', '#3b2a24'),
-      brow: g('--brow', '#3b2a24'),
-      line: g('--line', '#6b4a33'),
-      sclera: g('--sclera', '#ffffff'),
-      iris: g('--iris', '#5b4636'),
-      pupil: g('--pupil', '#1c1411'),
-      mouth: g('--mouth', '#8f4a44'),
-      mouthInner: g('--mouth-inner', '#6d2f2c'),
-      teeth: g('--teeth', '#fbf7f4'),
-      tongue: g('--tongue', '#c2606a'),
-      blush: g('--blush', 'rgba(226,120,110,0.35)'),
-    };
+    return palette();
   }
 
   // Blinks and breathing are procedural: they are not linguistic, so they must
@@ -400,7 +516,13 @@ class Player {
     const dt = now - this._blinkStart;
     const BLINK = 130;
     const blink = dt >= 0 && dt < BLINK ? 1 - Math.abs(dt / (BLINK / 2) - 1) : 0;
-    return { blink, breath: Math.sin(now / 1900) };
+    return {
+      blink,
+      breath: Math.sin(now / 1900),
+      swayX: Math.sin(now / 1450) * 0.9 + Math.sin(now / 610) * 0.4,
+      swayY: Math.cos(now / 1180) * 0.8,
+      gaze: Math.sin(now / 2600) * 0.12,
+    };
   }
 
   draw(now) {
@@ -408,7 +530,9 @@ class Player {
     const C = this.colors();
     const F = window.SLFace;
     const time = now === undefined ? performance.now() : now;
-    const { blink, breath } = this.idle(time);
+    const idle = this.idle(time);
+    const blink = idle.blink;
+    const breath = idle.breath;
 
     ctx.save();
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -430,15 +554,19 @@ class Player {
     const hv2 = s.v.slice(POSE_LEN, POSE_LEN * 2);
     const fc = F.vecToFace(s.v.slice(POSE_LEN * 2));
     fc.eyeOpen *= 1 - blink;
+    fc.gazeX += idle.gaze;
 
     F.drawAvatar(ctx, C, fc, breath);
 
     // Non-dominant hand first so the dominant one reads on top.
-    const y2 = s.y2 + breath * 1.2;
-    drawArm(ctx, C, s.x2, y2, SHOULDER_L, -1);
-    drawHand(ctx, C, vecToPose(hv2), s.x2, y2, s.r2, HAND_SCALE, true);
-    drawArm(ctx, C, s.x, s.y);
-    drawHand(ctx, C, vecToPose(hv), s.x, s.y, s.r, HAND_SCALE);
+    const x1 = s.x + idle.swayX;
+    const y1 = s.y + idle.swayY;
+    const x2 = s.x2 - idle.swayX;
+    const y2 = s.y2 + breath * 1.2 + idle.swayY;
+    drawArm(ctx, C, x2, y2, SHOULDER_L, -1);
+    drawHand(ctx, C, vecToPose(hv2), x2, y2, s.r2, HAND_SCALE, true);
+    drawArm(ctx, C, x1, y1);
+    drawHand(ctx, C, vecToPose(hv), x1, y1, s.r, HAND_SCALE);
 
     ctx.restore();
   }
@@ -446,7 +574,7 @@ class Player {
 
 window.SLPlayer = {
   Player, Timeline, STAGE_W, STAGE_H, HAND_SCALE, POSE_LEN,
-  drawHand, drawArm, poseToVec, vecToPose,
+  drawHand, drawArm, poseToVec, vecToPose, palette,
 };
 
 })();

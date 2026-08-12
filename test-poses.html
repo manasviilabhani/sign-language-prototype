@@ -18,7 +18,7 @@
 <script src="hand.js"></script>
 <script>
 const names = Object.keys(window.SL.POSES);
-const C = { skin:'#edbb93', skinEdge:'#a9683c' };
+const C = window.SLPlayer.palette();
 for (const n of names) {
   const cell = document.createElement('div');
   cell.className = 'cell';

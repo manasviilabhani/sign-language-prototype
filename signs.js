@@ -105,8 +105,8 @@ const A_ = {
   belly: [176, 350],
   side: [110, 330],
   out: [88, 260],
-  rest: [140, 416],
-  rest2: [260, 412],   // non-dominant hand at rest
+  rest: [140, 400],
+  rest2: [260, 400],   // non-dominant hand at rest
 };
 
 // keyframe: pose name, wrist [x, y], wrist rotation, hold ms, optional face

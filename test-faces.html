@@ -7,9 +7,7 @@
 <div class="grid" id="g"></div>
 <script src="signs.js"></script><script src="face.js"></script><script src="hand.js"></script>
 <script>
-const C={skin:'#edbb93',skinEdge:'#a9683c',skinShade:'#d79c72',shirt:'#6366f1',shirtDark:'#4338ca',
-hair:'#3b2a24',brow:'#4a352c',line:'#a9683c',sclera:'#fff',iris:'#6b4b32',pupil:'#221812',
-mouth:'#9c4f47',mouthInner:'#6d2f2c',teeth:'#fdfaf7',tongue:'#cf6c74',blush:'rgba(226,120,110,0.3)'};
+const C = window.SLPlayer.palette();
 for(const n of Object.keys(window.SLFace.FACES)){
   const c=document.createElement('div');c.className='c';
   const l=document.createElement('div');l.className='l';l.textContent=n;
