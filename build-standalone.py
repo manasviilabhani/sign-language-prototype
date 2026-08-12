@@ -23,6 +23,10 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 SCRIPTS = ['signs.js', 'asl.js', 'face.js', 'hand.js', 'app.js', 'flat.js']
+# 3D is the default on the real site, but Three.js is an ES module that cannot
+# be inlined, so the single-file build pins itself to the flat renderer rather
+# than sitting through the fallback timeout with an empty stage.
+PIN_2D = "<script>if(!/[?&]2d\\b/.test(location.search)){history.replaceState(null,'',location.pathname+(location.search?location.search+'&':'?')+'2d'+location.hash);}</script>" 
 TITLE = 'Voice → Sign Language'
 
 
@@ -64,7 +68,7 @@ def main():
     style = theme_aware(slice_between(index, r'^<style>', r'^</style>', 'the stylesheet'))
     body = slice_between(index, r'^<div class="wrap">', r'^</div>$', 'the page body')
 
-    parts = ['<title>%s</title>' % TITLE, style, body]
+    parts = ['<title>%s</title>' % TITLE, PIN_2D, style, body]
     for name in SCRIPTS:
         src = HERE / name
         if not src.exists():

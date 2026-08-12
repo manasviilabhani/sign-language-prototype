@@ -597,9 +597,17 @@ function create(canvas) {
 
 window.SLFlat = { create, VIEW, STAGE_W, C };
 
-// Attach unless the 3D scene was explicitly requested with ?3d
-if (!/[?&]3d\b/.test(location.search) && window.SLApp && window.SLApp.player) {
-  window.SLApp.player.attach(create(document.getElementById('stage')));
+/* The 3D scene is the default now, so this attaches only when asked for with
+ * ?2d — or as a fallback when 3D never came up, which covers WebGL being
+ * unavailable and the single-file build, where the Three.js module is not
+ * inlined. The fallback waits a moment: scene3d.js is an ES module and so
+ * always evaluates after this classic script. */
+function attachFlat() {
+  if (window.SLApp && window.SLApp.player && !window.SLApp.player.renderer) {
+    window.SLApp.player.attach(create(document.getElementById('stage')));
+  }
 }
+if (/[?&]2d\b/.test(location.search)) attachFlat();
+else if (window.SLApp && window.SLApp.player) setTimeout(attachFlat, 1200);
 
 })();

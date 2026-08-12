@@ -218,14 +218,18 @@ export function createScene(canvas) {
   scene.add(rim);
 
   const M = {
-    skin: new THREE.MeshStandardMaterial({ color: 0xe8b48c, roughness: 0.72, metalness: 0.02 }),
+    skin: new THREE.MeshStandardMaterial({ color: 0xefc09b, roughness: 0.66, metalness: 0 }),
     shirt: new THREE.MeshStandardMaterial({ color: 0x5b5fd6, roughness: 0.86 }),
     hair: new THREE.MeshStandardMaterial({ color: 0x2f211b, roughness: 0.78 }),
-    sclera: new THREE.MeshStandardMaterial({ color: 0xf7f7f7, roughness: 0.35 }),
-    iris: new THREE.MeshStandardMaterial({ color: 0x5b4636, roughness: 0.3 }),
+    // Not pure white. A bright white ball in a face reads as a googly eye;
+    // real sclera is warm and slightly shaded by the socket.
+    sclera: new THREE.MeshStandardMaterial({ color: 0xefe8de, roughness: 0.22 }),
+    iris: new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.18 }),
+    limbal: new THREE.MeshStandardMaterial({ color: 0x2b1a10, roughness: 0.4 }),
+    lash: new THREE.MeshStandardMaterial({ color: 0x2a1d17, roughness: 0.85 }),
     pupil: new THREE.MeshStandardMaterial({ color: 0x140f0c, roughness: 0.3 }),
     brow: new THREE.MeshStandardMaterial({ color: 0x33241d, roughness: 0.8 }),
-    lip: new THREE.MeshStandardMaterial({ color: 0x8f4a45, roughness: 0.6 }),
+    lip: new THREE.MeshStandardMaterial({ color: 0xa85f57, roughness: 0.52 }),
     mouth: new THREE.MeshStandardMaterial({ color: 0x54211f, roughness: 0.7 }),
   };
 
@@ -255,16 +259,23 @@ export function createScene(canvas) {
   head.position.y = P.neckY + 0.045;
   avatar.add(head);
 
-  const skull = new THREE.Mesh(new THREE.SphereGeometry(P.headR, 32, 24), M.skin);
-  skull.scale.set(0.80, 1.20, 0.93);
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(P.headR, 48, 32), M.skin);
+  skull.scale.set(0.84, 1.14, 0.95);
   skull.position.y = 0.075;
   skull.castShadow = true;
   skull.receiveShadow = true;
   head.add(skull);
 
+  // Jaw: narrows the lower face so the head is not a plain ovoid.
+  const jaw = new THREE.Mesh(new THREE.SphereGeometry(P.headR * 0.80, 32, 24), M.skin);
+  jaw.scale.set(0.82, 0.86, 0.92);
+  jaw.position.y = 0.030;
+  jaw.castShadow = true;
+  head.add(jaw);
+
   const hair = new THREE.Mesh(
-    new THREE.SphereGeometry(P.headR * 1.05, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.40), M.hair);
-  hair.scale.set(0.88, 1.22, 1.02);
+    new THREE.SphereGeometry(P.headR * 1.05, 40, 24, 0, Math.PI * 2, 0, Math.PI * 0.38), M.hair);
+  hair.scale.set(0.90, 1.16, 1.03);
   hair.position.y = 0.075;
   hair.castShadow = true;
   head.add(hair);
@@ -282,38 +293,69 @@ export function createScene(canvas) {
   nose.position.set(0, 0.058, 0.0905);
   head.add(nose);
 
-  /* eyes */
+  /* Eyes.
+   *
+   * The eyeball used to sit 5mm proud of the skull surface — a white sphere
+   * stuck on the front of the face, which is exactly what reads as googly.
+   * It is now smaller and set back inside the socket, so only the aperture
+   * between the lids shows, and it carries the three things that actually
+   * make a drawn eye look like an eye: a dark limbal ring around the iris, a
+   * lash line along the upper lid, and a catchlight. */
   const eyes = [];
+  /* The skull is a solid sphere with no sockets cut into it, so an eye can
+   * only be seen where it stands proud of the surface. The surface sits at
+   * z=0.0921 here, so the ball is set just 2mm out — enough for the aperture
+   * between the lids to read, where the old 5mm made a ball stuck on a face.
+   * Bury it any deeper and the eye disappears inside the head entirely. */
+  const EYE_Z = 0.0803;
+  const EYE_R = 0.0138;
   for (const s of [-1, 1]) {
     const g = new THREE.Group();
-    g.position.set(s * 0.032, 0.086, 0.0795);
+    g.position.set(s * 0.0328, 0.0862, EYE_Z);
     head.add(g);
 
-    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.0152, 20, 16), M.sclera);
-    ball.scale.set(1, 0.94, 0.88);
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(EYE_R, 28, 20), M.sclera);
+    ball.scale.set(1, 0.95, 0.9);
     g.add(ball);
-    const iris = new THREE.Mesh(new THREE.SphereGeometry(0.0074, 18, 14), M.iris);
-    iris.position.z = 0.0122;
-    iris.scale.z = 0.62;
-    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.0034, 14, 10), M.pupil);
-    pupil.position.z = 0.0050;
+
+    // Limbal ring: the dark boundary of the iris. Eyes look dead without it.
+    const limbal = new THREE.Mesh(new THREE.SphereGeometry(0.0064, 20, 16), M.limbal);
+    limbal.position.z = 0.0118;
+    limbal.scale.z = 0.5;
+    ball.add(limbal);
+    const iris = new THREE.Mesh(new THREE.SphereGeometry(0.0054, 20, 16), M.iris);
+    iris.position.z = 0.0012;
+    iris.scale.z = 1;
+    limbal.add(iris);
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.0024, 16, 12), M.pupil);
+    pupil.position.z = 0.0030;
     pupil.scale.z = 0.7;
     iris.add(pupil);
-    ball.add(iris);
+    // Catchlight — a real eye always has one, and it is most of the liveliness.
+    const spark = new THREE.Mesh(new THREE.SphereGeometry(0.0013, 10, 8), M.sclera);
+    spark.position.set(-s * 0.0019, 0.0021, 0.0044);
+    iris.add(spark);
 
-    // lids are spherical caps that rotate down over the eyeball
-    const lidGeo = new THREE.SphereGeometry(0.0163, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.5);
+    // Lids are spherical caps that rotate down over the eyeball.
+    const lidGeo = new THREE.SphereGeometry(EYE_R * 1.10, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.5);
     const upper = new THREE.Mesh(lidGeo, M.skin);
     g.add(upper);
     const lower = new THREE.Mesh(lidGeo, M.skin);
     lower.rotation.x = Math.PI;
     g.add(lower);
 
-    const browGeo = new THREE.TorusGeometry(0.0175, 0.0028, 8, 16, Math.PI * 0.62);
+    // Lash line, carried by the upper lid so it tracks blinks.
+    const lash = new THREE.Mesh(
+      new THREE.TorusGeometry(EYE_R * 1.06, 0.0016, 6, 20, Math.PI * 0.92), M.lash);
+    lash.rotation.set(deg(90), 0, deg(4));
+    lash.position.y = -0.0004;
+    upper.add(lash);
+
+    const browGeo = new THREE.TorusGeometry(0.0182, 0.0032, 8, 20, Math.PI * 0.66);
     const brow = new THREE.Mesh(browGeo, M.brow);
-    brow.position.set(s * 0.032, 0.1010, 0.0855);
-    brow.rotation.set(deg(-18), 0, deg(90) - Math.PI * 0.31);
-    brow.scale.set(1, 0.72, 0.6);
+    brow.position.set(s * 0.0328, 0.1022, 0.0910);
+    brow.rotation.set(deg(-18), 0, deg(90) - Math.PI * 0.33);
+    brow.scale.set(1, 0.68, 0.6);
     head.add(brow);
 
     eyes.push({ g, ball, upper, lower, brow, side: s });
@@ -390,13 +432,13 @@ export function createScene(canvas) {
     );
     for (const e of eyes) {
       const open = clamp(f.eyeOpen, 0, 1.3);
-      e.upper.rotation.x = deg(-56 + (1 - open) * 84);
+      e.upper.rotation.x = deg(-49 + (1 - open) * 80);
       e.lower.rotation.x = Math.PI + deg(52 - f.squint * 58);
       e.ball.rotation.y = deg(f.gazeX * 22);
       e.ball.rotation.x = deg(f.gazeY * 16);
-      e.brow.position.y = 0.1010 + f.brow * 0.010;
-      e.brow.rotation.z = deg(90) - Math.PI * 0.31 - deg(e.side * (f.browTilt * 16 - f.brow * 4));
-      e.brow.position.z = 0.0855 + f.brow * 0.002;
+      e.brow.position.y = 0.1022 + f.brow * 0.010;
+      e.brow.rotation.z = deg(90) - Math.PI * 0.33 - deg(e.side * (f.browTilt * 16 - f.brow * 4));
+      e.brow.position.z = 0.0910 + f.brow * 0.002;
     }
     const open = clamp(f.mouthOpen, 0, 1);
     const wide = 1 + f.mouthWide * 0.30;
@@ -448,7 +490,7 @@ export function createScene(canvas) {
  * ---------------------------------------------------------------- */
 
 const canvas = document.getElementById('stage');
-if (canvas && window.SLApp && window.SLApp.player && /[?&]3d\b/.test(location.search)) {
+if (canvas && window.SLApp && window.SLApp.player && !/[?&]2d\b/.test(location.search)) {
   const scene = createScene(canvas);
   window.SLApp.player.attach(scene);
   window.SL3D = scene;
