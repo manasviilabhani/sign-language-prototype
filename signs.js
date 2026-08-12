@@ -106,6 +106,7 @@ const A_ = {
   side: [110, 330],
   out: [88, 260],
   rest: [140, 416],
+  rest2: [260, 412],   // non-dominant hand at rest
 };
 
 // keyframe: pose name, wrist [x, y], wrist rotation, hold ms, optional face
@@ -379,6 +380,466 @@ const VOCAB = {
     frames: [kf('V', at('eye', 10, 12), -8, 200), kf('V', at('eye', -22, -4), -8, 280)],
   },
 };
+
+
+/* ---------------------------------------------------------------- *
+ * Sign construction
+ *
+ * ASL signs decompose into handshape, location, movement and orientation
+ * (the Stokoe parameters). Building them from those primitives means a new
+ * word is one line instead of a hand-tuned keyframe list.
+ *
+ * Signs built this way are marked `gen` and are APPROXIMATIONS of the
+ * documented form — the parameters are right, the fine detail is not.
+ * ---------------------------------------------------------------- */
+
+const MIRROR = (x) => 2 * 200 - x;
+
+// shape: 'B' or 'C>S' (start > end handshape)
+// mv: hold tap down up out in fwd circle shake twist rep arc alt wiggle
+// o: { two: 'mirror'|'base'|'alt', rot, dx, dy, dur, face, baseShape, baseRot }
+function mk(shape, loc, mv, o) {
+  o = o || {};
+  const parts = String(shape).split('>');
+  const h1 = parts[0];
+  const h2 = parts[1] || parts[0];
+  const anchor = at(loc, o.dx || 0, o.dy || 0);
+  const bx = anchor[0];
+  const by = anchor[1];
+  const R = o.rot === undefined ? -6 : o.rot;
+  const D = o.dur || 230;
+
+  // [handshape, dx, dy, drot, duration]
+  let steps;
+  switch (mv) {
+    case 'tap':
+      steps = [[h1, 0, -13, 0, D * 0.7], [h1, 0, 2, 0, D * 0.6],
+               [h1, 0, -13, 0, D * 0.6], [h2, 0, 2, 0, D * 0.8]]; break;
+    case 'down':
+      steps = [[h1, 0, -22, 0, D], [h2, 0, 26, 7, D]]; break;
+    case 'up':
+      steps = [[h1, 0, 26, 0, D], [h2, 0, -22, -7, D]]; break;
+    case 'out':
+      steps = [[h1, 0, 0, 0, D], [h2, -44, -12, -15, D]]; break;
+    case 'in':
+      steps = [[h1, -44, -12, -15, D], [h2, 0, 0, 0, D]]; break;
+    case 'fwd':
+      steps = [[h1, 14, 8, 8, D], [h2, -22, -6, -6, D]]; break;
+    case 'circle':
+      steps = [[h1, 0, -17, 0, D * 0.7], [h1, 19, 0, 0, D * 0.55],
+               [h1, 0, 19, 0, D * 0.55], [h1, -17, 0, 0, D * 0.55],
+               [h2, 0, -15, 0, D * 0.75]]; break;
+    case 'shake':
+      steps = [[h1, 13, 0, 7, D * 0.6], [h1, -13, 0, -7, D * 0.55],
+               [h1, 13, 0, 7, D * 0.55], [h2, -13, 0, -7, D * 0.7]]; break;
+    case 'twist':
+      steps = [[h1, 0, 0, -40, D], [h2, 0, -4, 34, D]]; break;
+    case 'rep':
+      steps = [[h1, 0, 0, 0, D * 0.75], [h2, 0, 0, 0, D * 0.7],
+               [h1, 0, 0, 0, D * 0.7], [h2, 0, 0, 0, D * 0.85]]; break;
+    case 'arc':
+      steps = [[h1, 24, 10, 12, D], [h2, -28, -16, -16, D]]; break;
+    case 'alt':
+      steps = [[h1, 0, -19, 0, D * 0.8], [h1, 0, 17, 0, D * 0.7],
+               [h1, 0, -19, 0, D * 0.7], [h2, 0, 17, 0, D * 0.85]]; break;
+    case 'wiggle':
+      steps = [[h1, 6, -4, 9, D * 0.5], [h2, -6, 4, -9, D * 0.45],
+               [h1, 6, -4, 9, D * 0.45], [h2, -6, 4, -9, D * 0.6]]; break;
+    case 'hold':
+    default:
+      steps = [[h1, 0, 0, 0, D * 1.5]];
+  }
+
+  return steps.map(function (st, i) {
+    const x = bx + st[1];
+    const y = by + st[2];
+    const r = R + st[3];
+    const f = { p: st[0], x: x, y: y, r: r, d: st[4] };
+    if (o.two === 'mirror') {
+      // Same shape and path, reflected about the midline.
+      f.p2 = st[0]; f.x2 = MIRROR(x); f.y2 = y; f.r2 = r;
+    } else if (o.two === 'base') {
+      // Non-dominant hand holds a static base the dominant hand acts on.
+      f.p2 = o.baseShape || 'FLAT';
+      f.x2 = 200 + (200 - bx) * 0.42;
+      f.y2 = by + 26;
+      f.r2 = o.baseRot === undefined ? 62 : o.baseRot;
+    } else if (o.two === 'alt') {
+      // Hands in opposite phase.
+      f.p2 = st[0]; f.x2 = MIRROR(x); f.y2 = by - st[2]; f.r2 = r;
+    }
+    return f;
+  });
+}
+
+/* ---------------------------------------------------------------- *
+ * Core vocabulary — [handshape, location, movement, options]
+ * ---------------------------------------------------------------- */
+
+const BUILT = {
+  /* people & family */
+  MOTHER: ['OPEN', 'chin', 'tap', { rot: -22 }],
+  FATHER: ['OPEN', 'forehead', 'tap', { rot: -22 }],
+  PARENT: ['OPEN', 'chin', 'up', { rot: -22 }],
+  SISTER: ['L', 'cheek', 'down', { two: 'mirror' }],
+  BROTHER: ['L', 'forehead', 'down', { two: 'mirror' }],
+  BABY: ['FLAT', 'belly', 'shake', { two: 'mirror', rot: 70 }],
+  CHILD: ['FLAT', 'belly', 'tap', { rot: 84 }],
+  CHILDREN: ['FLAT', 'belly', 'shake', { rot: 84 }],
+  SON: ['OPEN', 'forehead', 'down'],
+  DAUGHTER: ['OPEN', 'chin', 'down'],
+  GRANDMOTHER: ['OPEN', 'chin', 'arc', { rot: -22 }],
+  GRANDFATHER: ['OPEN', 'forehead', 'arc', { rot: -22 }],
+  AUNT: ['A', 'cheek', 'shake'],
+  UNCLE: ['U', 'temple', 'shake'],
+  MAN: ['OPEN', 'forehead', 'down', { rot: -22 }],
+  WOMAN: ['OPEN', 'chin', 'down', { rot: -22 }],
+  BOY: ['C>O', 'forehead', 'rep'],
+  GIRL: ['A', 'cheek', 'down'],
+  HUSBAND: ['C>S', 'forehead', 'down', { two: 'base' }],
+  WIFE: ['C>S', 'chin', 'down', { two: 'base' }],
+  PERSON: ['FLAT', 'chest', 'down', { two: 'mirror', rot: 160 }],
+  TEACHER: ['O', 'forehead', 'out', { two: 'mirror' }],
+  STUDENT: ['CLAW>O', 'chest', 'up', { two: 'mirror' }],
+  DOCTOR: ['M', 'spell', 'tap', { dx: 40 }],
+  NURSE: ['N', 'spell', 'tap', { dx: 40 }],
+  BOSS: ['CLAW', 'temple', 'tap', { dx: -34 }],
+  NEIGHBOR: ['FLAT', 'chest', 'fwd', { two: 'base' }],
+
+  /* pronouns & reference */
+  HE: ['POINT', 'out', 'hold', { rot: -74 }],
+  SHE: ['POINT', 'out', 'hold', { rot: -74 }],
+  IT: ['POINT', 'out', 'hold', { rot: -74 }],
+  THEY: ['POINT', 'out', 'arc', { rot: -74 }],
+  THEM: ['POINT', 'out', 'arc', { rot: -74 }],
+  US: ['POINT', 'chest', 'arc', { rot: 40 }],
+  OUR: ['FLAT', 'chest', 'arc', { rot: 60 }],
+  THIS: ['POINT', 'chest', 'tap', { rot: 150, two: 'base' }],
+  THAT: ['Y', 'chest', 'down', { two: 'base' }],
+  HERE: ['FLAT', 'chest', 'circle', { two: 'mirror', rot: 150 }],
+  THERE: ['POINT', 'out', 'hold', { rot: -60 }],
+
+  /* time */
+  TIME: ['POINT', 'spell', 'tap', { dx: 44, rot: 30 }],
+  DAY: ['POINT', 'forehead', 'arc', { two: 'base' }],
+  WEEK: ['POINT', 'chest', 'out', { two: 'base' }],
+  MONTH: ['POINT', 'chest', 'down', { two: 'base' }],
+  YEAR: ['S', 'chest', 'circle', { two: 'base', baseShape: 'S' }],
+  MORNING: ['FLAT', 'belly', 'up', { two: 'base' }],
+  AFTERNOON: ['FLAT', 'chest', 'fwd', { two: 'base' }],
+  EVENING: ['FLAT', 'chest', 'down', { two: 'base' }],
+  NIGHT: ['FLAT', 'chest', 'down', { two: 'base', rot: 150 }],
+  TONIGHT: ['FLAT', 'chest', 'down', { two: 'base', rot: 150 }],
+  HOUR: ['POINT', 'chest', 'circle', { two: 'base' }],
+  MINUTE: ['POINT', 'chest', 'tap', { two: 'base' }],
+  LATER: ['L', 'chest', 'twist', { two: 'base' }],
+  BEFORE: ['FLAT', 'chest', 'in'],
+  AFTER: ['FLAT', 'chest', 'out'],
+  ALWAYS: ['POINT', 'spell', 'circle'],
+  NEVER: ['FLAT', 'spell', 'arc', { face: 'neg' }],
+  SOMETIMES: ['POINT', 'chest', 'tap', { two: 'base' }],
+  OFTEN: ['FLAT', 'chest', 'rep', { two: 'base' }],
+  SOON: ['F', 'chin', 'tap'],
+  LATE: ['FLAT', 'side', 'shake'],
+  EARLY: ['CLAW', 'chest', 'out', { two: 'base' }],
+  AGAIN: ['CLAW', 'chest', 'in', { two: 'base' }],
+  NEXT: ['FLAT', 'chest', 'arc', { two: 'base' }],
+  LAST: ['I', 'chest', 'tap', { two: 'base' }],
+
+  /* places */
+  HOUSE: ['FLAT', 'forehead', 'arc', { two: 'mirror' }],
+  ROOM: ['FLAT', 'chest', 'out', { two: 'mirror', rot: 60 }],
+  OFFICE: ['O', 'chest', 'out', { two: 'mirror' }],
+  STORE: ['O', 'chest', 'rep', { two: 'mirror', rot: 150 }],
+  CITY: ['FLAT', 'spell', 'rep', { two: 'mirror' }],
+  TOWN: ['FLAT', 'spell', 'rep', { two: 'mirror' }],
+  HOSPITAL: ['H', 'side', 'tap', { dx: 56 }],
+  CHURCH: ['C', 'chest', 'tap', { two: 'base' }],
+  RESTAURANT: ['R', 'chin', 'shake'],
+  BATHROOM: ['T', 'spell', 'shake'],
+  LIBRARY: ['L', 'spell', 'circle'],
+  PARK: ['P', 'chest', 'arc', { two: 'base' }],
+  STREET: ['FLAT', 'chest', 'out', { two: 'mirror', rot: 60 }],
+  COUNTRY: ['Y', 'spell', 'circle', { dx: 40 }],
+  WORLD: ['W', 'chest', 'circle', { two: 'base', baseShape: 'W' }],
+  PLACE: ['P', 'chest', 'circle', { two: 'mirror' }],
+
+  /* food & drink */
+  MILK: ['C>S', 'chest', 'rep'],
+  COFFEE: ['S', 'chest', 'circle', { two: 'base', baseShape: 'S' }],
+  TEA: ['F', 'chest', 'circle', { two: 'base', baseShape: 'O' }],
+  BREAD: ['FLAT', 'chest', 'rep', { two: 'base' }],
+  RICE: ['R', 'chest', 'up', { two: 'base' }],
+  APPLE: ['X', 'cheek', 'twist'],
+  BANANA: ['POINT>O', 'spell', 'down', { two: 'base' }],
+  EGG: ['U', 'chest', 'down', { two: 'mirror' }],
+  MEAT: ['F', 'chest', 'tap', { two: 'base' }],
+  FISH: ['FLAT', 'spell', 'shake', { rot: -70 }],
+  CHICKEN: ['G', 'mouth', 'rep'],
+  CHEESE: ['FLAT', 'chest', 'twist', { two: 'base' }],
+  SOUP: ['U', 'chest', 'up', { two: 'base' }],
+  CAKE: ['CLAW', 'chest', 'out', { two: 'base' }],
+  CANDY: ['POINT', 'cheek', 'twist'],
+  PIZZA: ['V', 'spell', 'arc'],
+  BREAKFAST: ['FLAT', 'mouth', 'tap'],
+  LUNCH: ['FLAT', 'mouth', 'tap'],
+  DINNER: ['FLAT', 'mouth', 'tap'],
+  THIRSTY: ['POINT', 'neck', 'down'],
+  COOK: ['FLAT', 'chest', 'twist', { two: 'base' }],
+  SUGAR: ['U', 'chin', 'rep'],
+  SALT: ['U', 'spell', 'tap', { two: 'base' }],
+
+  /* animals */
+  DOG: ['OPEN', 'side', 'tap'],
+  CAT: ['F', 'cheek', 'out'],
+  BIRD: ['G', 'mouth', 'rep'],
+  HORSE: ['U', 'temple', 'rep'],
+  COW: ['Y', 'temple', 'twist'],
+  PIG: ['FLAT', 'chin', 'rep'],
+  BEAR: ['CLAW', 'chest', 'tap', { two: 'mirror' }],
+  MOUSE: ['POINT', 'nose', 'shake'],
+  ANIMAL: ['CLAW', 'chest', 'rep', { two: 'mirror' }],
+
+  /* verbs */
+  NEED: ['X', 'chest', 'down', { face: 'mm' }],
+  LIKE: ['OPEN>F', 'chest', 'out', { face: 'smile' }],
+  HATE: ['OPEN', 'chest', 'out', { face: 'angry' }],
+  THINK: ['POINT', 'forehead', 'circle'],
+  FEEL: ['OPEN', 'chest', 'up'],
+  LOOK: ['V', 'eye', 'out'],
+  WATCH: ['V', 'eye', 'out'],
+  HEAR: ['POINT', 'eye', 'hold', { dx: -30, dy: 10 }],
+  LISTEN: ['CLAW', 'eye', 'hold', { dx: -30, dy: 10 }],
+  SAY: ['POINT', 'mouth', 'circle'],
+  TELL: ['POINT', 'chin', 'out'],
+  TALK: ['4', 'chin', 'rep'],
+  SPEAK: ['4', 'chin', 'rep'],
+  ASK: ['POINT>X', 'chest', 'in'],
+  ANSWER: ['POINT', 'chin', 'out', { two: 'mirror' }],
+  READ: ['V', 'chest', 'down', { two: 'base' }],
+  WRITE: ['F', 'chest', 'out', { two: 'base' }],
+  TEACH: ['O', 'forehead', 'out', { two: 'mirror' }],
+  STUDY: ['OPEN', 'chest', 'wiggle', { two: 'base' }],
+  PLAY: ['Y', 'chest', 'twist', { two: 'mirror' }],
+  MAKE: ['S', 'chest', 'twist', { two: 'base', baseShape: 'S' }],
+  GIVE: ['O', 'chest', 'out'],
+  TAKE: ['OPEN>S', 'chest', 'in'],
+  GET: ['OPEN>S', 'chest', 'in'],
+  BUY: ['O', 'chest', 'out', { two: 'base' }],
+  SELL: ['O', 'chest', 'shake', { two: 'mirror' }],
+  PAY: ['POINT', 'chest', 'out', { two: 'base' }],
+  DRIVE: ['S', 'chest', 'shake', { two: 'mirror' }],
+  WALK: ['FLAT', 'belly', 'alt', { two: 'alt', rot: 150 }],
+  RUN: ['L', 'chest', 'out', { two: 'mirror' }],
+  SIT: ['U', 'chest', 'down', { two: 'base' }],
+  STAND: ['V', 'chest', 'down', { two: 'base', rot: 150 }],
+  WAKE: ['O>L', 'eye', 'rep', { two: 'mirror' }],
+  WAIT: ['OPEN', 'chest', 'wiggle', { two: 'mirror' }],
+  START: ['POINT', 'chest', 'twist', { two: 'base' }],
+  BEGIN: ['POINT', 'chest', 'twist', { two: 'base' }],
+  OPEN: ['B', 'chest', 'out', { two: 'mirror' }],
+  CLOSE: ['B', 'chest', 'in', { two: 'mirror' }],
+  MEET: ['POINT', 'chest', 'in', { two: 'mirror' }],
+  LEAVE: ['OPEN>S', 'chest', 'out', { two: 'mirror' }],
+  ARRIVE: ['FLAT', 'chest', 'in', { two: 'base' }],
+  LIVE: ['A', 'belly', 'up', { two: 'mirror' }],
+  MOVE: ['O', 'chest', 'arc', { two: 'mirror' }],
+  CHANGE: ['X', 'chest', 'twist', { two: 'base', baseShape: 'X' }],
+  TRY: ['S', 'chest', 'fwd', { two: 'mirror' }],
+  PRACTICE: ['A', 'chest', 'shake', { two: 'base' }],
+  REMEMBER: ['A', 'forehead', 'down', { two: 'base', baseShape: 'A' }],
+  FORGET: ['OPEN>A', 'forehead', 'out'],
+  EXPLAIN: ['F', 'chest', 'rep', { two: 'alt' }],
+  SHOW: ['POINT', 'chest', 'fwd', { two: 'base' }],
+  FIND: ['OPEN>F', 'chest', 'up'],
+  LOSE: ['O>OPEN', 'chest', 'down', { two: 'mirror' }],
+  WIN: ['OPEN>S', 'chest', 'up', { two: 'mirror' }],
+  CALL: ['H', 'chest', 'out', { two: 'base' }],
+  SEND: ['FLAT', 'chest', 'out', { two: 'base' }],
+  BRING: ['FLAT', 'chest', 'in', { two: 'mirror', rot: 60 }],
+  USE: ['U', 'chest', 'circle', { two: 'base' }],
+  CLEAN: ['FLAT', 'chest', 'out', { two: 'base' }],
+  WASH: ['A', 'chest', 'rep', { two: 'base', baseShape: 'A' }],
+  DANCE: ['V', 'chest', 'shake', { two: 'base' }],
+  SING: ['FLAT', 'chest', 'shake', { two: 'base' }],
+  SWIM: ['FLAT', 'chest', 'out', { two: 'mirror' }],
+  DRAW: ['I', 'chest', 'down', { two: 'base' }],
+  BUILD: ['FLAT', 'chest', 'alt', { two: 'alt' }],
+  FIX: ['O', 'chest', 'rep', { two: 'alt' }],
+  BREAK: ['S', 'chest', 'twist', { two: 'mirror' }],
+  CUT: ['V', 'chest', 'rep', { rot: -70 }],
+  PUSH: ['FLAT', 'chest', 'out', { two: 'mirror' }],
+  PULL: ['S', 'chest', 'in', { two: 'mirror' }],
+  CARRY: ['FLAT', 'chest', 'arc', { two: 'mirror' }],
+  HOLD: ['S', 'chest', 'hold', { two: 'mirror' }],
+  TOUCH: ['POINT', 'chest', 'tap', { two: 'base' }],
+  HUG: ['S', 'chest', 'in', { two: 'mirror', face: 'smile' }],
+  SMILE: ['POINT', 'mouth', 'out', { face: 'happy' }],
+  LAUGH: ['L', 'mouth', 'rep', { face: 'happy' }],
+  CRY: ['POINT', 'eye', 'down', { two: 'alt', face: 'sad' }],
+  DRINK2: ['C', 'mouth', 'twist'],
+
+  /* adjectives */
+  BIG: ['L', 'chest', 'out', { two: 'mirror' }],
+  SMALL: ['FLAT', 'chest', 'in', { two: 'mirror' }],
+  LITTLE: ['FLAT', 'chest', 'in', { two: 'mirror' }],
+  TALL: ['POINT', 'chest', 'up', { two: 'base' }],
+  SHORT: ['H', 'chest', 'down', { two: 'base' }],
+  LONG: ['POINT', 'chest', 'up', { two: 'base' }],
+  HOT: ['CLAW', 'mouth', 'out', { face: 'cha' }],
+  COLD: ['S', 'chest', 'shake', { two: 'mirror', face: 'mm' }],
+  WARM: ['A>OPEN', 'mouth', 'up'],
+  NEW: ['FLAT', 'chest', 'in', { two: 'base' }],
+  OLD: ['S', 'chin', 'down'],
+  YOUNG: ['CLAW', 'chest', 'up', { two: 'mirror' }],
+  BEAUTIFUL: ['OPEN>O', 'forehead', 'circle', { face: 'smile' }],
+  PRETTY: ['OPEN>O', 'forehead', 'circle', { face: 'smile' }],
+  UGLY: ['X', 'nose', 'out', { face: 'angry' }],
+  EASY: ['U', 'chest', 'up', { two: 'base' }],
+  HARD: ['V', 'chest', 'tap', { two: 'base', baseShape: 'V' }],
+  DIFFICULT: ['V', 'chest', 'tap', { two: 'base', baseShape: 'V' }],
+  FAST: ['L>S', 'chest', 'in', { two: 'mirror' }],
+  SLOW: ['FLAT', 'chest', 'in', { two: 'base' }],
+  LOUD: ['POINT', 'eye', 'out', { two: 'mirror', dx: -30, dy: 10 }],
+  QUIET: ['FLAT', 'mouth', 'down', { two: 'mirror', face: 'mm' }],
+  DIRTY: ['OPEN', 'chin', 'wiggle', { rot: 150 }],
+  FULL: ['FLAT', 'chest', 'out', { two: 'base' }],
+  SICK: ['CLAW', 'forehead', 'tap', { face: 'sad' }],
+  HEALTHY: ['OPEN>S', 'chest', 'out', { two: 'mirror' }],
+  STRONG: ['S', 'chest', 'out', { two: 'mirror' }],
+  WEAK: ['CLAW', 'chest', 'down', { two: 'base' }],
+  RICH: ['OPEN>S', 'chest', 'up', { two: 'base' }],
+  POOR: ['CLAW>O', 'chest', 'down'],
+  SCARED: ['OPEN', 'chest', 'in', { two: 'mirror', face: 'surprise' }],
+  AFRAID: ['OPEN', 'chest', 'in', { two: 'mirror', face: 'surprise' }],
+  EXCITED: ['I', 'chest', 'alt', { two: 'alt', face: 'happy' }],
+  BORED: ['POINT', 'nose', 'twist', { face: 'sleepy' }],
+  FUNNY: ['U', 'nose', 'rep', { face: 'happy' }],
+  NICE: ['FLAT', 'chest', 'out', { two: 'base', face: 'smile' }],
+  SMART: ['POINT', 'forehead', 'out'],
+  RIGHT: ['POINT', 'chest', 'down', { two: 'base', baseShape: 'POINT' }],
+  CORRECT: ['POINT', 'chest', 'down', { two: 'base', baseShape: 'POINT' }],
+  WRONG: ['Y', 'chin', 'tap', { face: 'neg' }],
+  TRUE: ['POINT', 'mouth', 'out'],
+  SAME: ['Y', 'chest', 'shake', { rot: 60 }],
+  DIFFERENT: ['POINT', 'chest', 'out', { two: 'mirror' }],
+  IMPORTANT: ['F', 'chest', 'up', { two: 'mirror' }],
+  READY: ['R', 'chest', 'out', { two: 'mirror' }],
+  BUSY: ['B', 'chest', 'shake', { two: 'base' }],
+  SAFE: ['S', 'chest', 'out', { two: 'mirror' }],
+
+  /* things */
+  BOOK: ['FLAT', 'chest', 'twist', { two: 'mirror' }],
+  PAPER: ['FLAT', 'chest', 'rep', { two: 'base' }],
+  PEN: ['F', 'chest', 'out', { two: 'base' }],
+  PENCIL: ['F', 'chin', 'out', { two: 'base' }],
+  COMPUTER: ['C', 'spell', 'arc', { dx: 30 }],
+  PHONE: ['Y', 'cheek', 'hold', { rot: -20 }],
+  MONEY: ['FLAT', 'chest', 'tap', { two: 'base' }],
+  JOB: ['J', 'chest', 'hold'],
+  CLASS: ['C', 'chest', 'arc', { two: 'mirror' }],
+  TEST: ['POINT>CLAW', 'chest', 'down', { two: 'mirror' }],
+  HOMEWORK: ['FLAT', 'forehead', 'down', { two: 'base' }],
+  CAR: ['S', 'chest', 'alt', { two: 'alt' }],
+  BUS: ['B', 'spell', 'out'],
+  TRAIN: ['U', 'chest', 'rep', { two: 'base', baseShape: 'U' }],
+  PLANE: ['Y', 'chest', 'out'],
+  BIKE: ['S', 'belly', 'alt', { two: 'alt' }],
+  DOOR: ['B', 'chest', 'twist', { two: 'mirror' }],
+  WINDOW: ['FLAT', 'chest', 'down', { two: 'base' }],
+  TABLE: ['FLAT', 'chest', 'tap', { two: 'base' }],
+  CHAIR: ['U', 'chest', 'tap', { two: 'base', baseShape: 'U' }],
+  BED: ['FLAT', 'cheek', 'hold', { rot: -30 }],
+  CLOTHES: ['OPEN', 'chest', 'down', { two: 'mirror' }],
+  SHOES: ['S', 'chest', 'tap', { two: 'mirror' }],
+  SHIRT: ['F', 'chest', 'rep'],
+  HAT: ['FLAT', 'forehead', 'tap'],
+  BAG: ['CLAW', 'side', 'hold'],
+  KEY: ['X', 'chest', 'twist', { two: 'base' }],
+  LIGHT: ['O>OPEN', 'forehead', 'down'],
+  MUSIC: ['FLAT', 'chest', 'shake', { two: 'base' }],
+  MOVIE: ['OPEN', 'chest', 'shake', { two: 'base' }],
+  GAME: ['A', 'chest', 'tap', { two: 'mirror' }],
+  STORY: ['F', 'chest', 'out', { two: 'mirror' }],
+  WORD: ['G', 'spell', 'tap', { two: 'base' }],
+  QUESTION: ['POINT', 'spell', 'twist'],
+  PROBLEM: ['X', 'chest', 'rep', { two: 'mirror' }],
+  IDEA: ['I', 'forehead', 'up'],
+  REASON: ['R', 'forehead', 'circle'],
+  LIFE: ['L', 'belly', 'up', { two: 'mirror' }],
+  WEATHER: ['W', 'spell', 'twist', { two: 'mirror' }],
+  RAIN: ['CLAW', 'forehead', 'alt', { two: 'mirror', rot: 150 }],
+  SNOW: ['OPEN', 'forehead', 'down', { two: 'mirror', rot: 150 }],
+  SUN: ['C', 'forehead', 'out', { dx: -30, dy: -30 }],
+  MOON: ['C', 'forehead', 'out', { dx: -20, dy: -34 }],
+  STAR: ['POINT', 'forehead', 'alt', { two: 'alt' }],
+  TREE: ['OPEN', 'chest', 'twist', { two: 'base', rot: 0 }],
+  FLOWER: ['O', 'nose', 'shake'],
+  FIRE: ['OPEN', 'chest', 'up', { two: 'mirror' }],
+
+  /* connectives & quantity */
+  WITH: ['A', 'chest', 'in', { two: 'mirror' }],
+  WITHOUT: ['A>OPEN', 'chest', 'out', { two: 'mirror' }],
+  FOR: ['POINT', 'forehead', 'out'],
+  ABOUT: ['POINT', 'chest', 'circle', { two: 'base', baseShape: 'O' }],
+  IF: ['F', 'eye', 'shake'],
+  BUT: ['POINT', 'chest', 'out', { two: 'mirror' }],
+  BECAUSE: ['POINT>A', 'forehead', 'out'],
+  ALSO: ['POINT', 'chest', 'out', { two: 'mirror' }],
+  OR: ['L', 'chest', 'shake'],
+  THAN: ['FLAT', 'chest', 'down', { two: 'base' }],
+  VERY: ['V', 'chest', 'out', { two: 'mirror' }],
+  MOST: ['A', 'chest', 'up', { two: 'base', baseShape: 'A' }],
+  LESS: ['FLAT', 'chest', 'down', { two: 'base' }],
+  MANY: ['S>OPEN', 'chest', 'rep', { two: 'mirror' }],
+  FEW: ['A>OPEN', 'chest', 'out'],
+  ALL: ['FLAT', 'chest', 'circle', { two: 'base' }],
+  SOME: ['FLAT', 'chest', 'out', { two: 'base' }],
+  EVERY: ['A', 'chest', 'down', { two: 'base', baseShape: 'A' }],
+  ANY: ['A', 'chest', 'arc'],
+  NOTHING: ['O', 'chin', 'out', { face: 'neg' }],
+  SOMETHING: ['POINT', 'chest', 'shake'],
+  EVERYTHING: ['FLAT', 'chest', 'circle', { two: 'base' }],
+  ONLY: ['POINT', 'chest', 'circle'],
+  MAYBE: ['FLAT', 'chest', 'alt', { two: 'alt' }],
+  MUST: ['X', 'chest', 'down'],
+  SHOULD: ['X', 'chest', 'down'],
+  CAN: ['S', 'chest', 'down', { two: 'mirror' }],
+  ABLE: ['S', 'chest', 'down', { two: 'mirror' }],
+  AND: ['OPEN>O', 'chest', 'out'],
+  TOGETHER: ['A', 'chest', 'circle', { two: 'mirror' }],
+  ALONE: ['POINT', 'chest', 'circle'],
+  AGREE: ['POINT', 'forehead', 'down', { two: 'mirror' }],
+  BETTER: ['FLAT', 'chin', 'arc'],
+  BEST: ['FLAT', 'chin', 'up'],
+  FAVORITE: ['I', 'chin', 'tap'],
+  WELCOME: ['FLAT', 'chest', 'in', { face: 'smile' }],
+  EXCUSE: ['FLAT', 'chest', 'out', { two: 'base' }],
+  CONGRATULATIONS: ['S', 'chest', 'shake', { two: 'mirror', face: 'happy' }],
+};
+
+for (const w of Object.keys(BUILT)) {
+  if (VOCAB[w]) continue;                       // hand-authored wins
+  const spec = BUILT[w];
+  const o = spec[3] || {};
+  VOCAB[w] = {
+    frames: mk(spec[0], spec[1], spec[2], o),
+    two: !!o.two,
+    face: o.face,
+    gen: true,                                  // built from primitives, approximate
+  };
+}
+
+/* Legacy two-handed entries were authored before the second hand was animated:
+ * mirror the dominant track onto the non-dominant one. */
+for (const w of Object.keys(VOCAB)) {
+  const e = VOCAB[w];
+  if (!e.frames || e.two !== true) continue;
+  if (e.frames.some((f) => f.p2)) continue;
+  e.frames = e.frames.map((f) => Object.assign({}, f, {
+    p2: f.p, x2: MIRROR(f.x), y2: f.y, r2: f.r,
+  }));
+}
 
 // Alias resolution
 for (const k of Object.keys(VOCAB)) {

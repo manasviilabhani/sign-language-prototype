@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Filmstrip</title>
+<script>/*ERRCATCH*/window.addEventListener("error",e=>{document.title="ERR "+e.message+" @"+e.filename+":"+e.lineno});</script>
 <style>
   body { margin:0; background:#fff; font:12px system-ui; color:#111; }
   .strip { display:flex; flex-wrap:wrap; gap:2px; padding:6px; }
@@ -18,6 +19,7 @@
 window.__TEST__ = true;
 </script>
 <script src="signs.js"></script>
+<script src="asl.js"></script>
 <script src="face.js"></script>
 <script src="hand.js"></script>
 <script>
@@ -37,12 +39,12 @@ const C = { skin:'#edbb93', skinEdge:'#a9683c', skinShade:'#d79c72', shirt:'#636
             sclera:'#fff', iris:'#6b4b32', pupil:'#221812', mouth:'#9c4f47',
             mouthInner:'#6d2f2c', teeth:'#fdfaf7', tongue:'#cf6c74', blush:'rgba(226,120,110,0.3)' };
 const P = window.SLPlayer;
-const phrases = ['where is the water', 'no', 'I am happy', 'thank you'];
+const phrases = ['book', 'my mother is a teacher', 'I want coffee', 'the car is big'];
 const out = document.getElementById('out');
 
 for (const phrase of phrases) {
   const h = document.createElement('h3');
-  h.textContent = phrase + '  →  ' + window.SLApp.tokenize(phrase).map(t => t.text + '[' + t.kind + ']').join(' ');
+  h.textContent = phrase + '  →  ' + window.SLApp.tokenize(phrase).tokens.map(t => t.text + '[' + t.kind + ']').join(' ');
   out.appendChild(h);
   const strip = document.createElement('div');
   strip.className = 'strip';
@@ -66,7 +68,9 @@ for (const phrase of phrases) {
     const ctx = cv.getContext('2d');
     ctx.scale(150 / P.STAGE_W, 195 / P.STAGE_H);
     const s = tl.sample(t);
-    window.SLFace.drawAvatar(ctx, C, window.SLFace.vecToFace(s.v.slice(P.POSE_LEN)), 0);
+    window.SLFace.drawAvatar(ctx, C, window.SLFace.vecToFace(s.v.slice(P.POSE_LEN * 2)), 0);
+    P.drawArm(ctx, C, s.x2, s.y2, { x: 257, y: 224 }, -1);
+    P.drawHand(ctx, C, P.vecToPose(s.v.slice(P.POSE_LEN, P.POSE_LEN * 2)), s.x2, s.y2, s.r2, P.HAND_SCALE, true);
     P.drawArm(ctx, C, s.x, s.y);
     P.drawHand(ctx, C, P.vecToPose(s.v.slice(0, P.POSE_LEN)), s.x, s.y, s.r, P.HAND_SCALE);
   }

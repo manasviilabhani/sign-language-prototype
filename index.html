@@ -156,20 +156,7 @@
         <canvas id="stage"></canvas>
         <div class="nowbar">
           <span id="now">—</span>
-          <span id="nowKind"></span>
           <span id="status">idle</span>
-        </div>
-        <div id="nowFace" class="facebar"></div>
-      </div>
-      <div class="panel">
-        <h2>Playback</h2>
-        <div class="row">
-          <button id="replay" class="ghost">↻ Replay</button>
-          <div class="speed">
-            <span>Speed</span>
-            <input id="speed" type="range" min="0.35" max="2" step="0.05" value="1" />
-            <span id="speedVal">1.00×</span>
-          </div>
         </div>
       </div>
     </div>
@@ -209,55 +196,10 @@
         </div>
       </div>
 
-      <div class="panel">
-        <h2>English → ASL gloss</h2>
-        <div class="glossbox">
-          <div class="glossrow"><span class="glosslbl">English</span><span id="english" class="muted">—</span></div>
-          <div class="glossrow"><span class="glosslbl">ASL gloss</span><span id="gloss">—</span></div>
-        </div>
-        <ul id="rules" class="rules"><li class="muted">Nothing signed yet.</li></ul>
-      </div>
 
-      <div class="panel">
-        <h2>Sign plan</h2>
-        <div id="plan"><span class="muted">Nothing to sign yet.</span></div>
-      </div>
 
-      <div class="panel">
-        <h2>Vocabulary — <span id="vocabCount">0</span> entries</h2>
-        <div id="vocab"></div>
-        <p class="note">Anything outside this list is fingerspelled letter by letter.</p>
-      </div>
 
-      <div class="panel">
-        <h2>Non-manual markers</h2>
-        <p class="note" style="margin-top:0">
-          In ASL the face is grammar, not decoration. The avatar applies these
-          automatically, and the sign plan labels which one is active.
-        </p>
-        <ul class="markers">
-          <li><b>Brows down</b> — WH-question, on the WH sign at the end.</li>
-          <li><b>Brows up</b> — yes/no question. Triggered by a trailing “?” or an opening auxiliary (do, can, is…).</li>
-          <li><b>Head shake</b> — negation. Spans from a negative word to the end of the clause.</li>
-          <li><b>Head nod</b> — affirmation.</li>
-          <li><b>Mouth morphemes</b> — “mm”, “oo”, “cha”, “th” on the signs that take them.</li>
-          <li><b>Affect</b> — happy / sad / angry / sorry, carried on the relevant signs.</li>
-        </ul>
-      </div>
 
-      <div class="panel">
-        <h2>What this is and isn't</h2>
-        <p class="caveat">
-          <strong>This is a prototype, not a translator.</strong> The grammar layer is a
-          rule engine — it handles word order, dropped function words, tense and marker
-          scope, but it does not parse clauses, so long or complex sentences will come
-          out wrong. <strong>Spatial grammar is missing entirely</strong>: no classifiers,
-          no verb agreement through space, no role shift, all of which are core ASL.
-          Two-handed signs use the dominant hand only. Nothing here has been checked by
-          a Deaf signer, which is the only real test — do not rely on it to communicate
-          with Deaf people.
-        </p>
-      </div>
     </div>
   </div>
 </div>

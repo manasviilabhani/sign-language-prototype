@@ -75,7 +75,6 @@ const smootherstep = (t) => t * t * t * (t * (t * 6 - 15) + 10);
 
 const SHOULDER = { x: 143, y: 224 };          // dominant (signer's right)
 const SHOULDER_L = { x: 257, y: 224 };        // passive, rests at the side
-const REST_WRIST_L = { x: 281, y: 366 };
 const REST_HAND_ROT = 168;   // a hand hanging at the side points down
 const UPPER = 96;
 const FORE = 100;
@@ -166,11 +165,12 @@ function drawChain(ctx, C, x, y, baseAngle, flex, lens, widths, rate) {
   return pts[pts.length - 1];
 }
 
-function drawHand(ctx, C, pose, x, y, rot, scale) {
+// `mirror` draws the same pose data as a left hand.
+function drawHand(ctx, C, pose, x, y, rot, scale, mirror) {
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate(rad(rot));
-  ctx.scale(scale, scale);
+  ctx.rotate(rad(mirror ? -rot : rot));
+  ctx.scale(mirror ? -scale : scale, scale);
 
   const halfW = GEO.palmW / 2;
 
@@ -230,13 +230,21 @@ class Timeline {
     const base = typeof defaultFace === 'object' && defaultFace !== null
       ? defaultFace
       : F.FACES[defaultFace] || F.FACES.neutral;
+    const A = window.SL.A_;
     for (const f of frames) {
       const p = window.SL.POSES[f.p] || window.SL.POSES.REST;
+      // Non-dominant hand: falls back to resting at the side when a sign is
+      // one-handed, so it interpolates down naturally instead of snapping.
+      const p2 = window.SL.POSES[f.p2] || window.SL.POSES.REST;
+      const x2 = f.x2 === undefined ? A.rest2[0] : f.x2;
+      const y2 = f.y2 === undefined ? A.rest2[1] : f.y2;
+      const r2 = f.r2 === undefined ? REST_HAND_ROT : f.r2;
       const fc = f.fc ? F.FACES[f.fc] || base : base;
-      const v = poseToVec(p).concat(F.faceToVec(fc));
+      const v = poseToVec(p).concat(poseToVec(p2), F.faceToVec(fc));
       const start = this.keys.length ? this.duration + TRANS : 0;
-      this.keys.push({ t: start, v, x: f.x, y: f.y, r: f.r });
-      this.keys.push({ t: start + f.d, v, x: f.x, y: f.y, r: f.r });
+      const k = { v, x: f.x, y: f.y, r: f.r, x2, y2, r2 };
+      this.keys.push(Object.assign({ t: start }, k));
+      this.keys.push(Object.assign({ t: start + f.d }, k));
       this.duration = start + f.d;
     }
     this.items.push({ label, kind, t0, t1: this.duration, face: faceLabel || '' });
@@ -245,9 +253,9 @@ class Timeline {
   sample(t) {
     const k = this.keys;
     if (!k.length) return null;
-    if (t <= k[0].t) return { v: k[0].v, x: k[0].x, y: k[0].y, r: k[0].r };
+    if (t <= k[0].t) return k[0];
     const last = k[k.length - 1];
-    if (t >= last.t) return { v: last.v, x: last.x, y: last.y, r: last.r };
+    if (t >= last.t) return last;
 
     let lo = 0;
     let hi = k.length - 1;
@@ -260,11 +268,11 @@ class Timeline {
     const b = k[hi];
     const span = b.t - a.t;
     const u = span <= 0 ? 0 : smootherstep((t - a.t) / span);
+    const mix = (p) => a[p] + (b[p] - a[p]) * u;
     return {
       v: lerpVec(a.v, b.v, u),
-      x: a.x + (b.x - a.x) * u,
-      y: a.y + (b.y - a.y) * u,
-      r: a.r + (b.r - a.r) * u,
+      x: mix('x'), y: mix('y'), r: mix('r'),
+      x2: mix('x2'), y2: mix('y2'), r2: mix('r2'),
     };
   }
 
@@ -409,19 +417,26 @@ class Player {
     ctx.scale(this.scale, this.scale);
 
     const s = this.timeline.sample(this.t) || {
-      v: poseToVec(window.SL.POSES.REST).concat(F.faceToVec(F.FACES.neutral)),
+      v: poseToVec(window.SL.POSES.REST)
+        .concat(poseToVec(window.SL.POSES.REST), F.faceToVec(F.FACES.neutral)),
       x: window.SL.A_.rest[0],
       y: window.SL.A_.rest[1],
       r: REST_HAND_ROT,
+      x2: window.SL.A_.rest2[0],
+      y2: window.SL.A_.rest2[1],
+      r2: REST_HAND_ROT,
     };
     const hv = s.v.slice(0, POSE_LEN);
-    const fc = F.vecToFace(s.v.slice(POSE_LEN));
+    const hv2 = s.v.slice(POSE_LEN, POSE_LEN * 2);
+    const fc = F.vecToFace(s.v.slice(POSE_LEN * 2));
     fc.eyeOpen *= 1 - blink;
 
     F.drawAvatar(ctx, C, fc, breath);
-    const lw = { x: REST_WRIST_L.x, y: REST_WRIST_L.y + breath * 1.2 };
-    drawArm(ctx, C, lw.x, lw.y, SHOULDER_L, -1);
-    drawHand(ctx, C, window.SL.POSES.REST, lw.x, lw.y, -REST_HAND_ROT, HAND_SCALE);
+
+    // Non-dominant hand first so the dominant one reads on top.
+    const y2 = s.y2 + breath * 1.2;
+    drawArm(ctx, C, s.x2, y2, SHOULDER_L, -1);
+    drawHand(ctx, C, vecToPose(hv2), s.x2, y2, s.r2, HAND_SCALE, true);
     drawArm(ctx, C, s.x, s.y);
     drawHand(ctx, C, vecToPose(hv), s.x, s.y, s.r, HAND_SCALE);
 

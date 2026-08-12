@@ -86,7 +86,13 @@ function buildTimeline(text) {
  * UI
  * ---------------------------------------------------------------- */
 
-const $ = (id) => document.getElementById(id);
+const NO_EL = {
+  textContent: '', innerHTML: '', value: '', disabled: false, scrollTop: 0, scrollHeight: 0,
+  dataset: {}, classList: { add() {}, remove() {}, toggle() {} },
+  addEventListener() {}, appendChild() {},
+};
+// Every panel is optional — a stripped-down page must not break the pipeline.
+const $ = (id) => document.getElementById(id) || NO_EL;
 
 const player = new Player($('stage'));
 const state = { queue: [], tokens: [], listening: false };
