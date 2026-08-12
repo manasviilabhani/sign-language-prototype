@@ -370,11 +370,12 @@ class Timeline {
       const p2 = window.SL.POSES[f.p2] || window.SL.POSES.REST;
       const x2 = f.x2 === undefined ? A.rest2[0] : f.x2;
       const y2 = f.y2 === undefined ? A.rest2[1] : f.y2;
+      const z2 = f.z2 === undefined ? A.rest2[2] : f.z2;
       const r2 = f.r2 === undefined ? REST_HAND_ROT : f.r2;
       const fc = f.fc ? F.FACES[f.fc] || base : base;
       const v = poseToVec(p).concat(poseToVec(p2), F.faceToVec(fc));
       const start = this.keys.length ? this.duration + TRANS : 0;
-      const k = { v, x: f.x, y: f.y, r: f.r, x2, y2, r2 };
+      const k = { v, x: f.x, y: f.y, z: f.z, r: f.r, x2, y2, z2, r2 };
       this.keys.push(Object.assign({ t: start }, k));
       this.keys.push(Object.assign({ t: start + f.d }, k));
       this.duration = start + f.d;
@@ -406,8 +407,8 @@ class Timeline {
     const mix = (p, e) => a[p] + (b[p] - a[p]) * e;
     return {
       v: lerpVec(a.v, b.v, u),
-      x: mix('x', uPos), y: mix('y', uPos), r: mix('r', uRot),
-      x2: mix('x2', uPos), y2: mix('y2', uPos), r2: mix('r2', uRot),
+      x: mix('x', uPos), y: mix('y', uPos), z: mix('z', uPos), r: mix('r', uRot),
+      x2: mix('x2', uPos), y2: mix('y2', uPos), z2: mix('z2', uPos), r2: mix('r2', uRot),
     };
   }
 
@@ -426,7 +427,7 @@ class Timeline {
 class Player {
   constructor(canvas) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext('2d');
+    this.renderer = null;      // set by scene3d.js once WebGL is up
     this.timeline = new Timeline();
     this.t = 0;
     this.speed = 1;
@@ -443,17 +444,17 @@ class Player {
   }
 
   resize() {
-    const dpr = window.devicePixelRatio || 1;
     const rect = this.canvas.getBoundingClientRect();
-    const w = rect.width || 400;
-    const h = rect.height || 520;
-    this.canvas.width = Math.round(w * dpr);
-    this.canvas.height = Math.round(h * dpr);
-    this.scale = Math.min(w / STAGE_W, h / STAGE_H);
-    this.offX = (w - STAGE_W * this.scale) / 2;
-    this.offY = (h - STAGE_H * this.scale) / 2;
-    this.dpr = dpr;
+    if (this.renderer && this.renderer.resize) {
+      this.renderer.resize(rect.width || 400, rect.height || 520);
+    }
     this.draw();
+  }
+
+  attach(renderer) {
+    this.renderer = renderer;
+    this.resize();
+    this.start();
   }
 
   setTimeline(tl) {
@@ -526,50 +527,35 @@ class Player {
   }
 
   draw(now) {
-    const ctx = this.ctx;
-    const C = this.colors();
+    if (!this.renderer) return;
     const F = window.SLFace;
     const time = now === undefined ? performance.now() : now;
     const idle = this.idle(time);
-    const blink = idle.blink;
-    const breath = idle.breath;
-
-    ctx.save();
-    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    ctx.translate(this.offX, this.offY);
-    ctx.scale(this.scale, this.scale);
 
     const s = this.timeline.sample(this.t) || {
       v: poseToVec(window.SL.POSES.REST)
         .concat(poseToVec(window.SL.POSES.REST), F.faceToVec(F.FACES.neutral)),
-      x: window.SL.A_.rest[0],
-      y: window.SL.A_.rest[1],
+      x: window.SL.A_.rest[0], y: window.SL.A_.rest[1], z: window.SL.A_.rest[2],
       r: REST_HAND_ROT,
-      x2: window.SL.A_.rest2[0],
-      y2: window.SL.A_.rest2[1],
+      x2: window.SL.A_.rest2[0], y2: window.SL.A_.rest2[1], z2: window.SL.A_.rest2[2],
       r2: REST_HAND_ROT,
     };
-    const hv = s.v.slice(0, POSE_LEN);
-    const hv2 = s.v.slice(POSE_LEN, POSE_LEN * 2);
-    const fc = F.vecToFace(s.v.slice(POSE_LEN * 2));
-    fc.eyeOpen *= 1 - blink;
-    fc.gazeX += idle.gaze;
 
-    F.drawAvatar(ctx, C, fc, breath);
+    const face = F.vecToFace(s.v.slice(POSE_LEN * 2));
+    face.eyeOpen *= 1 - idle.blink;
+    face.gazeX += idle.gaze;
 
-    // Non-dominant hand first so the dominant one reads on top.
-    const x1 = s.x + idle.swayX;
-    const y1 = s.y + idle.swayY;
-    const x2 = s.x2 - idle.swayX;
-    const y2 = s.y2 + breath * 1.2 + idle.swayY;
-    drawArm(ctx, C, x2, y2, SHOULDER_L, -1);
-    drawHand(ctx, C, vecToPose(hv2), x2, y2, s.r2, HAND_SCALE, true);
-    drawArm(ctx, C, x1, y1);
-    drawHand(ctx, C, vecToPose(hv), x1, y1, s.r, HAND_SCALE);
-
-    ctx.restore();
+    this.renderer.frame({
+      poseR: vecToPose(s.v.slice(0, POSE_LEN)),
+      poseL: vecToPose(s.v.slice(POSE_LEN, POSE_LEN * 2)),
+      wristR: { x: s.x + idle.swayX, y: s.y + idle.swayY, z: s.z, rot: s.r },
+      wristL: { x: s.x2 - idle.swayX, y: s.y2 + idle.swayY, z: s.z2, rot: s.r2 },
+      face,
+      breath: idle.breath,
+      colors: palette(),
+    });
   }
+
 }
 
 window.SLPlayer = {

@@ -43,7 +43,9 @@ mic → Web Speech API → transcript text
 | --- | --- |
 | `asl.js` | English → ASL gloss: word order, dropped words, marker scope, rule trace |
 | `signs.js` | Hand-shape definitions (26 letters, 0–9, ~65 word signs), stage anchors, per-sign markers |
-| `face.js` | Avatar body + face rig: the 14 non-manual parameters and the named markers |
+| `flat.js` | Flat vector character renderer (default view) |
+| `scene3d.js` | WebGL/Three.js avatar with articulated 3D hands — opt in with `?3d` |
+| `face.js` | Face rig: the 14 non-manual parameters and the named markers |
 | `hand.js` | Canvas renderer — hand geometry, two-bone arm IK, timeline + player |
 | `app.js` | Speech recognition, text → sign plan, clause markers, UI wiring |
 | `test-poses.html` | Contact sheet of every hand shape |
@@ -57,6 +59,22 @@ transitions between any two signs — face included — are a plain component-wi
 interpolation of one 33-number vector. Anchors (`chin`, `chest`, `forehead`…)
 are **wrist** positions — the hand extends about 95 stage-units above the wrist,
 so a sign that contacts the chin puts the wrist near the collarbone.
+
+### Renderers
+
+The player produces a renderer-agnostic state object (both hand poses, both
+wrist placements, the face vector) and hands it to whichever renderer is
+attached. Two exist:
+
+- **`flat.js`** — flat vector character, the default. Pastel fills, no
+  outlines, stylised hair, dot eyes.
+- **`scene3d.js`** — a Three.js avatar with real 3D finger joints, hanging
+  elbow IK and a rigged face. Add `?3d` to the URL. It expresses palm
+  orientation and depth, which the flat renderer cannot, but it does not match
+  the flat art direction. `?3d&cam=head` frames the face.
+
+Flat character art normally uses mitten hands. That is not an option here:
+in ASL the handshape *is* the phoneme, so fingers stay fully articulated.
 
 ### Deep links
 

@@ -92,30 +92,35 @@ const POSES = {
  * roughly 95 stage-units up from the wrist, so a sign that touches the chin
  * puts the wrist down around the collarbone. */
 const A_ = {
-  spell: [126, 258],   // neutral window, kept clear of the face
-  forehead: [156, 158],
-  temple: [150, 176],
-  eye: [162, 184],
-  nose: [178, 206],
-  chin: [176, 240],
-  mouth: [176, 222],
-  cheek: [148, 212],
-  neck: [176, 256],
-  chest: [172, 302],
-  belly: [176, 350],
-  side: [110, 330],
-  out: [88, 260],
-  rest: [140, 400],
-  rest2: [260, 400],   // non-dominant hand at rest
+  spell: [126, 258, 0.30],   // neutral window, kept clear of the face
+  forehead: [156, 158, 0.13],
+  temple: [150, 176, 0.13],
+  eye: [162, 184, 0.14],
+  nose: [178, 206, 0.15],
+  chin: [176, 240, 0.15],
+  mouth: [176, 222, 0.15],
+  cheek: [148, 212, 0.13],
+  neck: [176, 256, 0.17],
+  chest: [172, 302, 0.18],
+  belly: [176, 350, 0.19],
+  side: [110, 330, 0.22],
+  out: [88, 260, 0.42],
+  rest: [140, 400, 0.10],
+  rest2: [260, 400, 0.10],   // non-dominant hand at rest
 };
+const DEFAULT_Z = 0.26;
 
 // keyframe: pose name, wrist [x, y], wrist rotation, hold ms, optional face
 // override (used when a marker has to alternate inside one sign, e.g. a shake)
 function kf(p, xy, r, d, fc) {
-  return { p, x: xy[0], y: xy[1], r: r || 0, d: d === undefined ? 260 : d, fc };
+  return {
+    p, x: xy[0], y: xy[1], z: xy[2] === undefined ? DEFAULT_Z : xy[2],
+    r: r || 0, d: d === undefined ? 260 : d, fc,
+  };
 }
-function at(anchor, dx, dy) {
-  return [A_[anchor][0] + (dx || 0), A_[anchor][1] + (dy || 0)];
+function at(anchor, dx, dy, dz) {
+  const a = A_[anchor];
+  return [a[0] + (dx || 0), a[1] + (dy || 0), (a[2] === undefined ? DEFAULT_Z : a[2]) + (dz || 0)];
 }
 
 /* ---------------------------------------------------------------- *
@@ -454,19 +459,20 @@ function mk(shape, loc, mv, o) {
     const x = bx + st[1];
     const y = by + st[2];
     const r = R + st[3];
-    const f = { p: st[0], x: x, y: y, r: r, d: st[4] };
+    const f = { p: st[0], x: x, y: y, z: anchor[2], r: r, d: st[4] };
     if (o.two === 'mirror') {
       // Same shape and path, reflected about the midline.
-      f.p2 = st[0]; f.x2 = MIRROR(x); f.y2 = y; f.r2 = r;
+      f.p2 = st[0]; f.x2 = MIRROR(x); f.y2 = y; f.z2 = anchor[2]; f.r2 = r;
     } else if (o.two === 'base') {
       // Non-dominant hand holds a static base the dominant hand acts on.
       f.p2 = o.baseShape || 'FLAT';
       f.x2 = 200 + (200 - bx) * 0.42;
       f.y2 = by + 26;
+      f.z2 = anchor[2] + 0.03;
       f.r2 = o.baseRot === undefined ? 62 : o.baseRot;
     } else if (o.two === 'alt') {
       // Hands in opposite phase.
-      f.p2 = st[0]; f.x2 = MIRROR(x); f.y2 = by - st[2]; f.r2 = r;
+      f.p2 = st[0]; f.x2 = MIRROR(x); f.y2 = by - st[2]; f.z2 = anchor[2]; f.r2 = r;
     }
     return f;
   });
@@ -837,7 +843,7 @@ for (const w of Object.keys(VOCAB)) {
   if (!e.frames || e.two !== true) continue;
   if (e.frames.some((f) => f.p2)) continue;
   e.frames = e.frames.map((f) => Object.assign({}, f, {
-    p2: f.p, x2: MIRROR(f.x), y2: f.y, r2: f.r,
+    p2: f.p, x2: MIRROR(f.x), y2: f.y, z2: f.z, r2: f.r,
   }));
 }
 
