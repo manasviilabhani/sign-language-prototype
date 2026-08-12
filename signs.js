@@ -105,17 +105,47 @@ const A_ = {
   belly: [176, 350, 0.19],
   side: [110, 330, 0.22],
   out: [88, 260, 0.42],
-  rest: [140, 400, 0.10],
-  rest2: [260, 400, 0.10],   // non-dominant hand at rest
+  rest: [126, 402, 0.10],
+  rest2: [274, 402, 0.10],   // non-dominant hand at rest
 };
 const DEFAULT_Z = 0.26;
 
+/* Palm facing. ASL distinguishes signs by which way the palm points, and a
+ * flat drawing can only express that as the hand's chirality: the same
+ * outline read as a palm or as the back of a hand. So it has to be carried,
+ * not assumed. `out` faces the addressee — the whole manual alphabet is
+ * signed this way — and `in` faces the signer, which is most signs that
+ * contact the body: THANK-YOU leaves the chin with the palm inwards, so the
+ * viewer sees the back of the hand.
+ *
+ * Real signs also use palm-up, palm-down and every angle between, and this
+ * renderer has no way to show those; they fall on whichever side of the
+ * flip is closer. See the palm-orientation caveat in the README. */
+const PALM = { out: 1, in: -1 };
+const PALM_DEFAULT = PALM.out;   // fingerspelling, and anything unmarked
+/* Hands hanging at the sides are a case the two facings cannot actually
+ * describe: the palms face the thighs and the thumbs point forwards, straight
+ * at the viewer, which is neither. With the fingers curled there is nothing to
+ * tell the two apart anyway except which side the thumb falls on, so this is
+ * chosen for that: it tucks the thumbs towards the body, where a thumb
+ * pointing forwards reads. The other facing splays them outwards and the arms
+ * look put on backwards. */
+const PALM_REST = PALM.out;
+
+function facing(v, fallback) {
+  if (v === undefined || v === null) return fallback;
+  if (typeof v === 'number') return v < 0 ? PALM.in : PALM.out;
+  return PALM[v] === undefined ? fallback : PALM[v];
+}
+
 // keyframe: pose name, wrist [x, y], wrist rotation, hold ms, optional face
-// override (used when a marker has to alternate inside one sign, e.g. a shake)
-function kf(p, xy, r, d, fc) {
+// override (used when a marker has to alternate inside one sign, e.g. a shake),
+// optional palm facing for this frame alone (a sign that turns the hand over)
+function kf(p, xy, r, d, fc, pm) {
   return {
     p, x: xy[0], y: xy[1], z: xy[2] === undefined ? DEFAULT_Z : xy[2],
     r: r || 0, d: d === undefined ? 260 : d, fc,
+    pm: facing(pm, undefined),
   };
 }
 function at(anchor, dx, dy, dz) {
@@ -368,13 +398,15 @@ const VOCAB = {
   NOT: { face: 'neg',
     frames: [kf('A', at('chin', 8, -2), 4, 200), kf('A', at('chin', -14, 44), -16, 260)],
   },
+  // FINISH turns the hands over — they start facing the signer and flip out.
+  // That flip is the sign, so the palm is set per keyframe rather than once.
   FINISH: { face: 'mm',
     two: true,
     frames: [
-      kf('OPEN', at('chest', 10, -34), -40, 190),
-      kf('OPEN', at('chest', -4, -26), 34, 180),
-      kf('OPEN', at('chest', 10, -34), -40, 180),
-      kf('OPEN', at('chest', -4, -26), 34, 220),
+      kf('OPEN', at('chest', 10, -34), -40, 190, undefined, 'in'),
+      kf('OPEN', at('chest', -4, -26), 34, 180, undefined, 'out'),
+      kf('OPEN', at('chest', 10, -34), -40, 180, undefined, 'in'),
+      kf('OPEN', at('chest', -4, -26), 34, 220, undefined, 'out'),
     ],
   },
   FINISHED: { alias: 'FINISH' },
@@ -385,6 +417,27 @@ const VOCAB = {
     frames: [kf('V', at('eye', 10, 12), -8, 200), kf('V', at('eye', -22, -4), -8, 280)],
   },
 };
+
+/* Which of these signs are made with the palm towards the signer, so the
+ * viewer sees the back of the hand. Anything not listed faces the addressee,
+ * which is also what fingerspelling does.
+ *
+ * Read this list as "the nearer of two options", not as a description. A lot
+ * of these signs are really palm-up, palm-down, or edge-on to the viewer —
+ * WATER taps the chin with the palm facing sideways, HELP rests on an upturned
+ * base hand — and a flat renderer has only the two facings to put them in.
+ * Aliases inherit from their target and are not repeated. Sourced from the
+ * same grammar references as the rest, and unverified by a Deaf signer. */
+const PALM_IN_SIGNS = `
+  THANK PLEASE SORRY I ME MY WE NAME HELP LOVE GOOD BAD HAPPY SAD ANGRY TIRED
+  HUNGRY EAT FOOD DRINK WATER MORE COME HOME SCHOOL FRIEND WHO WHY HOW NOW
+  TODAY TOMORROW YESTERDAY SLEEP LEARN UNDERSTAND KNOW WANT DEAF NOT FUTURE SEE
+`.trim().split(/\s+/);
+
+for (const name of PALM_IN_SIGNS) {
+  if (!VOCAB[name]) throw new Error('palm facing set for unknown sign: ' + name);
+  VOCAB[name].palm = 'in';
+}
 
 
 /* ---------------------------------------------------------------- *
@@ -400,11 +453,21 @@ const VOCAB = {
 
 const MIRROR = (x) => 2 * 200 - x;
 
+/* A sign made against the body or face is performed with the palm turned
+ * towards the signer far more often than not — the hand has to face the place
+ * it contacts. Signs out in neutral space face the addressee. That is the
+ * default; `o.palm` overrides it for the signs that go the other way. */
+const BODY_ANCHORS = new Set(['forehead', 'temple', 'eye', 'nose', 'chin',
+                              'mouth', 'cheek', 'neck', 'chest', 'belly']);
+
 // shape: 'B' or 'C>S' (start > end handshape)
 // mv: hold tap down up out in fwd circle shake twist rep arc alt wiggle
-// o: { two: 'mirror'|'base'|'alt', rot, dx, dy, dur, face, baseShape, baseRot }
+// o: { two: 'mirror'|'base'|'alt', rot, dx, dy, dur, face, baseShape, baseRot,
+//      palm: 'in'|'out', palm2 }
 function mk(shape, loc, mv, o) {
   o = o || {};
+  const pm = facing(o.palm, BODY_ANCHORS.has(loc) ? PALM.in : PALM.out);
+  const pm2 = facing(o.palm2, pm);
   const parts = String(shape).split('>');
   const h1 = parts[0];
   const h2 = parts[1] || parts[0];
@@ -459,7 +522,8 @@ function mk(shape, loc, mv, o) {
     const x = bx + st[1];
     const y = by + st[2];
     const r = R + st[3];
-    const f = { p: st[0], x: x, y: y, z: anchor[2], r: r, d: st[4] };
+    const f = { p: st[0], x: x, y: y, z: anchor[2], r: r, d: st[4], pm: pm };
+    if (o.two) f.pm2 = pm2;
     if (o.two === 'mirror') {
       // Same shape and path, reflected about the midline.
       f.p2 = st[0]; f.x2 = MIRROR(x); f.y2 = y; f.z2 = anchor[2]; f.r2 = r;
@@ -872,6 +936,7 @@ const NUMBER_WORDS = {
   FIVE: '5', SIX: '6', SEVEN: '7', EIGHT: '8', NINE: '9',
 };
 
-window.SL = { POSES, VOCAB, A_, FINGERSPELL_MOTION, NUMBER_WORDS, kf, at };
+window.SL = { POSES, VOCAB, A_, FINGERSPELL_MOTION, NUMBER_WORDS, kf, at,
+              PALM, PALM_DEFAULT, PALM_REST, facing };
 
 })();

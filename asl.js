@@ -63,9 +63,21 @@ function normalize(text) {
   return text.toUpperCase().replace(/[^A-Z0-9'\-\s?]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+/* A word that is itself a sign is not inflected English. BRING, THIS, SHOES
+ * and ALWAYS all end in something the stemmer strips, and stripping it left
+ * BR, THI, SHOE and ALWAY — none of which are signs, so all four fell through
+ * to being fingerspelled while the real sign sat unused in the vocabulary.
+ * Sixteen signs were unreachable this way. Checking the vocabulary first costs
+ * a lookup and settles it: a known sign is never inflection. */
+function isSign(w) {
+  const V = window.SL && window.SL.VOCAB;
+  return !!(V && V[w]);
+}
+
 // Strip English inflection the way ASL does — tense and number come from
 // separate signs, not from the verb.
 function stem(w) {
+  if (isSign(w)) return w;
   if (w.length > 4 && w.endsWith('ING')) return w.slice(0, -3);
   if (w.length > 3 && w.endsWith('ED')) return w.slice(0, -2);
   if (w.length > 3 && w.endsWith('S') && !w.endsWith('SS')) return w.slice(0, -1);
@@ -93,8 +105,11 @@ function toGloss(text) {
   const hasWh = words.some((w) => WH.includes(w));
   const hasNeg = words.some((w) => NEGATIVE.includes(w));
   const hasTime = words.some((w) => TIME.includes(w));
+  // The -ED test is a guess, and it guessed wrong on TIRED, NEED, SCARED,
+  // EXCITED and BORED — each a sign in its own right, each turned into a
+  // spurious FINISH plus a mangled stem. A word that is a sign is not a tense.
   const isPast = words.some((w) => PAST_CUE.includes(w) || IRREGULAR_PAST[w] ||
-    (w.length > 3 && w.endsWith('ED')));
+    (w.length > 3 && w.endsWith('ED') && !isSign(w)));
   const isFuture = words.some((w) => FUTURE_CUE.includes(w));
 
   /* -- drop what ASL does not express lexically -- */
@@ -127,7 +142,7 @@ function toGloss(text) {
       g.push({ gloss: kept.length === 1 && w === 'NO' ? 'NO' : 'NOT', sign: kept.length === 1 && w === 'NO' ? 'NO' : 'NOT' });
       continue;
     }
-    const s = IRREGULAR_PAST[w] || stem(w);
+    const s = isSign(w) ? w : (IRREGULAR_PAST[w] || stem(w));
     g.push({ gloss: s, sign: s, english: w });
   }
   if (hasNeg) note('negation', 'NOT + head shake over the rest of the clause');

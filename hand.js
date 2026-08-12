@@ -30,6 +30,9 @@ const HAND_SCALE = 0.62;  // hand units -> stage units, sized against the head
 const BEND_RATE = 0.78;   // how much finger flexion becomes in-plane rotation
 const THUMB_RATE = 0.62;
 const SHORTEN = 0.3;      // foreshortening applied to a fully flexed segment
+// Thumb spread below which the thumb lies against the hand, so nothing of it
+// shows from behind. See the same constant in flat.js.
+const THUMB_ABDUCTED = 20;
 
 const rad = (d) => (d * Math.PI) / 180;
 
@@ -84,30 +87,49 @@ const REST_HAND_ROT = 168;   // a hand hanging at the side points down
 const UPPER = 96;
 const FORE = 100;
 
-// `side` picks which way the elbow swings: away from the body on each side.
-function solveArm(sh, wx, wy, side) {
+/* Anchors put the wrist 35–60 units from the shoulder while the arm is 196
+ * units of bone, so rigid bones reach them only by folding to a right angle.
+ * Picking between the two mirror solutions by "whichever is lower on screen"
+ * then threw that fold across the torso at face height and flipped it
+ * mid-transition — the inverted elbow. Instead the bones foreshorten on a
+ * short reach (a real arm angles toward the viewer when the hand comes to the
+ * signer's own face), and the elbow is placed by angle from a rest direction
+ * rather than picked from two branches, so there is nothing left to swap. */
+const CENTRE = 200;      // torso midline; the elbow stays on its own side of it
+const MAX_BOW = 36;      // furthest the elbow sits off the shoulder→wrist line
+const POLE_OUT = 0.15;   // outward lean of the elbow's rest direction
+const POLE_CUT = 2.35;   // reach angle past which the arm straightens out
+
+function solveArm(sh, wx, wy) {
   const dx = wx - sh.x;
   const dy = wy - sh.y;
   const raw = Math.hypot(dx, dy) || 0.001;
+  const dist = Math.min(UPPER + FORE - 4, raw);
 
-  // Clamp the reach into the range the two bones can actually span, keeping
-  // the direction intact — scaling only `dist` desyncs it from (dx, dy) and
-  // throws the elbow far off the shoulder-wrist line.
-  const max = UPPER + FORE - 4;
-  const min = Math.abs(UPPER - FORE) + 26;
-  const dist = Math.min(max, Math.max(min, raw));
-  const ux = dx / raw;
-  const uy = dy / raw;
+  // Where the elbow wants to sit: down, and away from the body.
+  const out = sh.x < CENTRE ? -1 : 1;
+  const pole = Math.atan2(1, POLE_OUT * out);
+  const theta = Math.atan2(dy, dx);
+  let d = pole - theta;
+  while (d > Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
 
-  const a = (UPPER * UPPER - FORE * FORE + dist * dist) / (2 * dist);
-  const h = Math.sqrt(Math.max(0, UPPER * UPPER - a * a));
-  const mx = sh.x + ux * a;
-  const my = sh.y + uy * a;
-  const e1 = { x: mx - uy * h, y: my + ux * h };
-  const e2 = { x: mx + uy * h, y: my - ux * h };
-  // Prefer the lower elbow, and break near-ties by swinging away from the body.
-  if (Math.abs(e1.y - e2.y) < 12) return (e1.x - sh.x) * side > (e2.x - sh.x) * side ? e2 : e1;
-  return e1.y > e2.y ? e1 : e2;
+  // Reaching straight back along the rest direction leaves no side to bend
+  // towards, so the arm straightens as it approaches that: the two ways to
+  // bend meet instead of swapping, which is what keeps the motion smooth.
+  const taper = Math.max(0, Math.min(1, (Math.PI - Math.abs(d)) / (Math.PI - POLE_CUT)));
+  const bow = MAX_BOW * taper;
+  const mean = (UPPER + FORE) / 2;
+  const s = Math.min(1, Math.sqrt(bow * bow + dist * dist / 4) / mean);
+  const up = UPPER * s;
+  const fo = FORE * s;
+
+  // Swing no further from the rest direction than reaching the wrist requires.
+  let c = (dist * dist + up * up - fo * fo) / (2 * dist * up);
+  c = Math.max(-1, Math.min(1, c));
+  const spread = Math.acos(c);
+  const phi = theta + Math.max(-spread, Math.min(spread, d));
+  return { x: sh.x + Math.cos(phi) * up, y: sh.y + Math.sin(phi) * up };
 }
 
 /* ---------------------------------------------------------------- *
@@ -156,9 +178,9 @@ function armGeom(ctx, C, shoulder, e, wx, wy) {
   ctx.fill();
 }
 
-function drawArm(ctx, C, wx, wy, sh, side) {
+function drawArm(ctx, C, wx, wy, sh) {
   const shoulder = sh || SHOULDER;
-  const e = solveArm(shoulder, wx, wy, side === undefined ? 1 : side);
+  const e = solveArm(shoulder, wx, wy);
   shadowed(ctx, 5, 11, 7, 0.22, (c, K) => armGeom(c, K, shoulder, e, wx, wy));
 
   ctx.save();
@@ -238,8 +260,17 @@ function drawChain(ctx, C, x, y, baseAngle, flex, lens, widths, rate, detail) {
   return pts[pts.length - 1];
 }
 
-function handGeom(ctx, C, pose, detail) {
+function handGeom(ctx, C, pose, detail, back) {
   const halfW = GEO.palmW / 2;
+  const t = GEO.thumb;
+  const thumb = () => drawChain(ctx, C, t.bx, t.by, rad(pose.ts),
+    [-pose.th[0], -pose.th[1]], t.len, t.w, THUMB_RATE, detail);
+
+  // Seen from behind, the thumb is on the far side of the hand: it goes down
+  // first so the palm covers all but the part that clears the silhouette —
+  // and a thumb that is not spread away from the hand clears nothing, so it
+  // is not drawn at all.
+  if (back && pose.ts >= THUMB_ABDUCTED) thumb();
 
   ctx.beginPath();
   ctx.moveTo(-halfW + 4, 6);
@@ -260,8 +291,8 @@ function handGeom(ctx, C, pose, detail) {
   ctx.fill();
   ctx.stroke();
 
-  if (detail !== false) {
-    // palm creases and the thenar pad
+  if (detail !== false && !back) {
+    // palm creases and the thenar pad — palm-side detail, so not from behind
     ctx.save();
     ctx.globalAlpha = 0.32;
     ctx.strokeStyle = C.crease;
@@ -282,8 +313,7 @@ function handGeom(ctx, C, pose, detail) {
     drawChain(ctx, C, g.bx, g.by, rad(pose.s[i]), pose.f[i], g.len, g.w, BEND_RATE, detail);
   }
 
-  const t = GEO.thumb;
-  drawChain(ctx, C, t.bx, t.by, rad(pose.ts), [-pose.th[0], -pose.th[1]], t.len, t.w, THUMB_RATE, detail);
+  if (!back) thumb();
 
   ctx.beginPath();
   ctx.ellipse(0, 10, halfW - 12, 9, 0, 0, Math.PI * 2);
@@ -292,18 +322,24 @@ function handGeom(ctx, C, pose, detail) {
 }
 
 // `mirror` draws the same pose data as a left hand.
-function drawHand(ctx, C, pose, x, y, rot, scale, mirror) {
+// The geometry is the signer's RIGHT hand seen from the BACK (thumb at +x).
+// Handedness and palm facing are one degree of freedom in a flat drawing, so
+// both are supplied: `mirror` marks the non-dominant hand, `palm` is +1 facing
+// the viewer and -1 facing the signer, and their product is the chirality.
+function drawHand(ctx, C, pose, x, y, rot, scale, mirror, palm) {
+  const pf = palm === undefined ? 1 : palm;
   const place = (c) => {
     c.translate(x, y);
     c.rotate(rad(mirror ? -rot : rot));
-    c.scale(mirror ? -scale : scale, scale);
+    c.scale((mirror ? 1 : -1) * pf * scale, scale);
   };
 
-  shadowed(ctx, 6, 13, 8, 0.26, (c, K) => { place(c); handGeom(c, K, pose, false); });
+  const back = pf < 0;
+  shadowed(ctx, 6, 13, 8, 0.26, (c, K) => { place(c); handGeom(c, K, pose, false, back); });
 
   ctx.save();
   place(ctx);
-  handGeom(ctx, C, pose, true);
+  handGeom(ctx, C, pose, true, back);
   ctx.restore();
 }
 
@@ -356,9 +392,10 @@ class Timeline {
   // `defaultFace` is the resolved non-manual marker for the whole item, either
   // a name or a composed face object; individual frames may override it via
   // `fc` (a head shake has to alternate within one sign).
-  add(frames, label, kind, defaultFace, faceLabel) {
+  add(frames, label, kind, defaultFace, faceLabel, defaultPalm) {
     const t0 = this.duration;
     const F = window.SLFace;
+    const basePalm = window.SL.facing(defaultPalm, window.SL.PALM_DEFAULT);
     const base = typeof defaultFace === 'object' && defaultFace !== null
       ? defaultFace
       : F.FACES[defaultFace] || F.FACES.neutral;
@@ -375,7 +412,14 @@ class Timeline {
       const fc = f.fc ? F.FACES[f.fc] || base : base;
       const v = poseToVec(p).concat(poseToVec(p2), F.faceToVec(fc));
       const start = this.keys.length ? this.duration + TRANS : 0;
-      const k = { v, x: f.x, y: f.y, z: f.z, r: f.r, x2, y2, z2, r2 };
+      // Palm facing rides alongside the wrist rather than inside the pose
+      // vector: it is a property of how the hand is turned, not of its shape.
+      const pf = f.pm === undefined ? basePalm : f.pm;
+      // A hand that the sign never places is resting at the side, so it keeps
+      // the neutral facing rather than taking the signing hand's.
+      const pf2 = f.pm2 !== undefined ? f.pm2
+        : (f.x2 === undefined ? window.SL.PALM_REST : pf);
+      const k = { v, x: f.x, y: f.y, z: f.z, r: f.r, x2, y2, z2, r2, pf, pf2 };
       this.keys.push(Object.assign({ t: start }, k));
       this.keys.push(Object.assign({ t: start + f.d }, k));
       this.duration = start + f.d;
@@ -409,6 +453,9 @@ class Timeline {
       v: lerpVec(a.v, b.v, u),
       x: mix('x', uPos), y: mix('y', uPos), z: mix('z', uPos), r: mix('r', uRot),
       x2: mix('x2', uPos), y2: mix('y2', uPos), z2: mix('z2', uPos), r2: mix('r2', uRot),
+      // Crossing zero narrows the hand to its edge and opens it the other way,
+      // which is what turning the palm over actually looks like from the front.
+      pf: mix('pf', uRot), pf2: mix('pf2', uRot),
     };
   }
 
@@ -539,6 +586,7 @@ class Player {
       r: REST_HAND_ROT,
       x2: window.SL.A_.rest2[0], y2: window.SL.A_.rest2[1], z2: window.SL.A_.rest2[2],
       r2: REST_HAND_ROT,
+      pf: window.SL.PALM_REST, pf2: window.SL.PALM_REST,
     };
 
     const face = F.vecToFace(s.v.slice(POSE_LEN * 2));
@@ -548,8 +596,10 @@ class Player {
     this.renderer.frame({
       poseR: vecToPose(s.v.slice(0, POSE_LEN)),
       poseL: vecToPose(s.v.slice(POSE_LEN, POSE_LEN * 2)),
-      wristR: { x: s.x + idle.swayX, y: s.y + idle.swayY, z: s.z, rot: s.r },
-      wristL: { x: s.x2 - idle.swayX, y: s.y2 + idle.swayY, z: s.z2, rot: s.r2 },
+      wristR: { x: s.x + idle.swayX, y: s.y + idle.swayY, z: s.z, rot: s.r,
+                palm: s.pf === undefined ? window.SL.PALM_DEFAULT : s.pf },
+      wristL: { x: s.x2 - idle.swayX, y: s.y2 + idle.swayY, z: s.z2, rot: s.r2,
+                palm: s.pf2 === undefined ? window.SL.PALM_DEFAULT : s.pf2 },
       face,
       breath: idle.breath,
       colors: palette(),

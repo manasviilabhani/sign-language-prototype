@@ -152,6 +152,7 @@ from a named anchor:
 ```js
 COFFEE: {
   face: 'mm',          // optional non-manual marker for this sign
+  palm: 'in',          // 'out' faces the addressee (the default), 'in' the signer
   two: true,
   frames: [
     kf('S', at('chest', 0, -30), 0, 200),
@@ -161,7 +162,18 @@ COFFEE: {
 ```
 
 A fifth argument to `kf()` overrides the face for one keyframe — that's how the
-head shake on NO alternates within a single sign.
+head shake on NO alternates within a single sign — and a sixth overrides the
+palm facing, which is how FINISH turns the hands over mid-sign. Signs built
+through `mk()` take `palm` in their options object and otherwise default by
+location: a sign made against the body or face faces the signer, one made in
+neutral space faces the addressee.
+
+Palm facing matters because a flat drawing cannot tell you which hand it is
+looking at. The same outline is a right hand palm-out or a left hand palm-in —
+so both facts have to be recorded, and the renderer multiplies them to get the
+hand's chirality. Interpolating between the two facings narrows the hand to its
+edge and opens it the other way, which is what a hand turning over looks like
+from the front.
 
 Reload `test-frames.html` (add your phrase to the `phrases` array) to check it.
 
@@ -184,9 +196,17 @@ should not be used to communicate with Deaf people.
   intensity or adverbial mouth morphemes beyond the handful listed above.
 - **One signing hand.** Two-handed signs are approximated with the dominant
   hand and labeled `2-handed` in the sign plan; the other arm just rests.
-- **2D, no palm orientation.** Flexion is faked with in-plane rotation plus
-  foreshortening. Signs distinguished only by palm facing or by depth of
-  movement will look the same.
+- **Palm facing is two-valued.** Each sign records whether the palm faces the
+  addressee or the signer, and the renderer draws the corresponding side of the
+  hand — that much is real, and it is why THANK-YOU shows the back of the hand
+  while the manual alphabet shows the palm. But palm-up, palm-down and every
+  angle between all collapse onto the nearer of those two. WATER taps the chin
+  with the palm sideways; HELP rests on an upturned base hand; both are stored
+  as "towards the signer" because there is nowhere else to put them. The
+  facings are also a desk exercise from published descriptions, not checked
+  against video.
+- **2D otherwise.** Flexion is faked with in-plane rotation plus foreshortening,
+  so signs distinguished only by depth of movement still look the same.
 - Hand shapes are hand-authored approximations, not motion capture.
 
 Doing this properly means a 3D avatar driven by mocap or pose-estimation data

@@ -66,10 +66,10 @@ for (const phrase of phrases) {
     ctx.scale(150 / P.STAGE_W, 195 / P.STAGE_H);
     const s = tl.sample(t);
     window.SLFace.drawAvatar(ctx, C, window.SLFace.vecToFace(s.v.slice(P.POSE_LEN * 2)), 0);
-    P.drawArm(ctx, C, s.x2, s.y2, { x: 257, y: 224 }, -1);
-    P.drawHand(ctx, C, P.vecToPose(s.v.slice(P.POSE_LEN, P.POSE_LEN * 2)), s.x2, s.y2, s.r2, P.HAND_SCALE, true);
+    P.drawArm(ctx, C, s.x2, s.y2, { x: 257, y: 224 });
+    P.drawHand(ctx, C, P.vecToPose(s.v.slice(P.POSE_LEN, P.POSE_LEN * 2)), s.x2, s.y2, s.r2, P.HAND_SCALE, true, s.pf2);
     P.drawArm(ctx, C, s.x, s.y);
-    P.drawHand(ctx, C, P.vecToPose(s.v.slice(0, P.POSE_LEN)), s.x, s.y, s.r, P.HAND_SCALE);
+    P.drawHand(ctx, C, P.vecToPose(s.v.slice(0, P.POSE_LEN)), s.x, s.y, s.r, P.HAND_SCALE, false, s.pf);
   }
 }
 </script>

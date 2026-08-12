@@ -83,13 +83,82 @@
     color: var(--text);
     font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
   }
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 24px 20px 60px; }
-  header { margin-bottom: 20px; }
-  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
-  .sub { color: var(--muted); font-size: 14px; margin: 0; }
+  /* The avatar is the page. It sits dead centre of the viewport at as large a
+     size as the height allows, and everything needed to drive it is docked in
+     a narrow rail on the right. Both are fixed rather than laid out in flow,
+     so the figure stays centred on the screen itself rather than centred in
+     whatever space the controls happen to leave over. */
+  .wrap { max-width: none; margin: 0; padding: 0; }
+  header {
+    position: fixed; top: 14px; left: 18px; z-index: 10;
+    opacity: 0.5; pointer-events: none;
+  }
+  h1 { font-size: 13px; margin: 0; letter-spacing: 0.01em; font-weight: 600; }
+  .sub { display: none; }
 
-  .grid { display: grid; grid-template-columns: minmax(320px, 420px) 1fr; gap: 18px; align-items: start; }
-  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .grid { display: block; }
+
+  .stage-panel {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    height: 94vh;
+    /* Explicit, and derived from the height rather than the content. A
+       shrink-to-fit panel takes its width from the canvas's intrinsic size,
+       which is its pixel buffer, which resize() sets from the CSS width — so
+       the element doubles on every resize. 70vh is the figure's 524:700 ratio
+       applied to the panel height; the cap keeps it clear of the rail. */
+    width: min(70vh, calc(100vw - 290px));
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  /* Both axes definite: width from the panel, height from the leftover flex
+     space (basis 0, so it never consults the canvas's own size). Nothing here
+     may derive from the canvas's intrinsic dimensions — see above. The figure
+     is not distorted by a slightly-off box: the renderer scales by
+     min(w/stage, h/stage) and centres. */
+  .stage-panel #stage {
+    width: 100%;
+    height: auto;
+    flex: 1 1 0;
+    min-height: 0;
+    aspect-ratio: auto;
+  }
+
+  .controls {
+    position: fixed;
+    top: 50%; right: 14px;
+    transform: translateY(-50%);
+    z-index: 20;
+    width: 232px;
+    max-height: 96vh;
+    overflow-y: auto;
+    font-size: 12px;
+  }
+  .controls .panel { padding: 10px; border-radius: 11px; }
+  .controls .panel + .panel { margin-top: 9px; }
+  .controls h2 { font-size: 9.5px; margin-bottom: 7px; }
+  .controls button { font-size: 12px; padding: 6px 10px; border-radius: 7px; }
+  .controls select, .controls textarea { font-size: 12px; padding: 6px 7px; border-radius: 7px; }
+  .controls textarea { min-height: 46px; }
+  .controls .row { gap: 6px; }
+  .controls .note { font-size: 10.5px; margin-top: 6px; line-height: 1.4; }
+  .controls .examples { gap: 5px; margin-top: 7px; }
+  .controls .example { font-size: 10.5px; padding: 4px 7px; }
+  .controls #interim { font-size: 11.5px; min-height: 0; }
+  .controls #transcript { font-size: 11.5px; max-height: 74px; }
+
+  /* Narrow screens: the rail cannot sit beside the figure, so it goes back to
+     the bottom of the page and the stage returns to normal flow. */
+  @media (max-width: 720px) {
+    .wrap { padding: 12px; }
+    .stage-panel { position: static; transform: none; height: auto; width: auto; }
+    .stage-panel #stage { aspect-ratio: 524 / 700; width: 100%; }
+    .controls { position: static; transform: none; width: auto; max-height: none; margin-top: 12px; }
+    header { position: static; opacity: 1; margin-bottom: 10px; }
+  }
 
   .panel {
     background: var(--panel);
@@ -101,6 +170,27 @@
   h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
 
   #stage { width: 100%; aspect-ratio: 524 / 700; display: block; border-radius: 10px; }
+
+  /* Listening.
+     The stage is already centred and as tall as the viewport allows, so there
+     is nothing to grow into — forcing it to a fixed 80% here would make the
+     avatar smaller, not bigger. What listening changes instead is everything
+     else: the page dims and the figure is the only lit thing on screen. */
+  .stage-panel.expanded {
+    z-index: 60;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+  }
+  #veil {
+    position: fixed;
+    inset: 0;
+    background: rgba(6, 8, 14, 0.55);
+    z-index: 55;
+  }
+  #veil[hidden] { display: none; }
+
+  /* Only reachable while expanded — the overlay covers the main mic button. */
+  #stopBig { display: none; font-size: 13px; padding: 5px 11px; }
+  .stage-panel.expanded #stopBig { display: inline-flex; }
 
   .nowbar { display: flex; align-items: baseline; gap: 10px; padding: 10px 4px 0; border-top: 1px solid var(--border); margin-top: 10px; }
   #now { font-size: 20px; font-weight: 650; letter-spacing: 0.02em; }
@@ -165,6 +255,7 @@
 </head>
 <body>
 <div class="wrap">
+  <div id="veil" hidden></div>
   <header>
     <h1>Voice → Sign Language</h1>
     <p class="sub">Speak, and the avatar signs it: the sentence is rewritten into ASL gloss order, known words become lexical signs, and the face carries the grammar.</p>
@@ -172,16 +263,17 @@
 
   <div class="grid">
     <div>
-      <div class="panel">
+      <div class="panel stage-panel" id="stagePanel">
         <canvas id="stage"></canvas>
         <div class="nowbar">
           <span id="now">—</span>
+          <button id="stopBig" class="ghost">■ Stop listening</button>
           <span id="status">idle</span>
         </div>
       </div>
     </div>
 
-    <div>
+    <div class="controls">
       <div class="panel">
         <h2>Voice input</h2>
         <div class="row">
