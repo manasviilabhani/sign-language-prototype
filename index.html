@@ -16,32 +16,36 @@
     --accent-soft: #eef0ff;
     --live: #dc2626;
 
-    --skin: #edbb93;
-    --skin-edge: #a9683c;
-    --skin-shade: #cf9264;
-    --skin-light: #fbdcbd;
-    --crease: #a2643c;
-    --shirt: #6366f1;
-    --shirt-dark: #4338ca;
-    --hair: #3b2a24;
-    --hair-light: #5f463b;
-    --hair-dark: #221610;
-    --shirt-light: #8b8ef7;
-    --skin-deep: #9c5a30;
-    --lash: #3a2a22;
-    --iris-light: #a67c56;
-    --lip-top: #833d38;
-    --lip-bottom: #cd7f76;
-    --brow: #4a352c;
-    --line: #a9683c;
-    --sclera: #ffffff;
-    --iris: #6b4b32;
-    --pupil: #221812;
-    --mouth: #9c4f47;
-    --mouth-inner: #6d2f2c;
-    --teeth: #fdfaf7;
-    --tongue: #cf6c74;
-    --blush: rgba(226,120,110,0.3);
+    /* Figure palette. The 3D renderer reads these through palette() in
+       hand.js, so this block is where the character's colours are chosen:
+       warm peach skin, a pink tee under blue denim dungarees, mid-brown hair.
+       (flat.js carries its own palette and is unaffected.) */
+    --skin: #f8cfa8;
+    --skin-edge: #c07d4c;
+    --skin-shade: #e0ab7f;
+    --skin-light: #ffe6cb;
+    --crease: #b9764a;
+    --shirt: #f2879f;
+    --shirt-dark: #d96a85;
+    --hair: #6d4226;
+    --hair-light: #8a5934;
+    --hair-dark: #4a2c18;
+    --shirt-light: #ffb3c6;
+    --skin-deep: #a86436;
+    --lash: #2d1b10;
+    --iris-light: #7d5232;
+    --lip-top: #b0554d;
+    --lip-bottom: #d9837a;
+    --brow: #8a6140;
+    --line: #c07d4c;
+    --sclera: #fffaf4;
+    --iris: #55331c;
+    --pupil: #150d07;
+    --mouth: #c4665c;
+    --mouth-inner: #7d2f2e;
+    --teeth: #fffaf4;
+    --tongue: #d4726f;
+    --blush: rgba(242,137,127,0.46);
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -52,27 +56,8 @@
       --muted: #939aa9;
       --accent: #818cf8;
       --accent-soft: #1e2140;
-      --skin: #d9a479;
-      --skin-edge: #8a5230;
-      --skin-shade: #b8825a;
-      --skin-light: #edc49b;
-      --crease: #82502e;
-      --shirt: #5b5fd6;
-      --shirt-dark: #3730a3;
-      --hair: #2b1e1a;
-      --hair-light: #45322b;
-      --hair-dark: #17100c;
-      --shirt-light: #7b7ee8;
-      --skin-deep: #7a4322;
-      --lash: #2c1f19;
-      --iris-light: #8c6544;
-      --lip-top: #6f322e;
-      --lip-bottom: #b56a62;
-      --brow: #3a2a22;
-      --line: #8a5230;
-      --iris: #5b3f2a;
-      --mouth: #8c443d;
-      --mouth-inner: #5e2724;
+      /* Figure colours are deliberately not overridden here. The character
+         should be the same character on a dark page; only the UI changes. */
     }
   }
 
