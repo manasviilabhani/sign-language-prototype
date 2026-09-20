@@ -252,18 +252,37 @@ const VOCAB = {
   WE: {
     frames: [kf('POINT', at('chest', 26, -30), 40, 200), kf('POINT', at('chest', -26, -30), -40, 260)],
   },
+  /* Two H hands, the dominant one tapping down across the other. The other is
+   * held still, so it is a base — mirrored, both hands tapped in sympathy 56
+   * units apart and the crossing never happened. */
   NAME: {
-    two: true,
+    two: 'base', baseShape: 'U', baseRot: 8,
     frames: [
-      kf('U', at('chest', 0, -46), 22, 190),
-      kf('U', at('chest', 0, -34), 22, 170),
-      kf('U', at('chest', 0, -46), 22, 170),
-      kf('U', at('chest', 0, -34), 22, 200),
+      kf('U', at('chest', 22, -40), 22, 190),
+      kf('U', at('chest', 22, -26), 22, 170),
+      kf('U', at('chest', 22, -40), 22, 170),
+      kf('U', at('chest', 22, -26), 22, 200),
     ],
   },
+  /* Left mirrored, and the audit still flags it, which is the honest state.
+   * HELP is neither of the two arrangements this file can express: the flat
+   * palm carries the dominant fist and *both* rise together, so the second hand
+   * is neither a mirror of the first nor a base that stays put. It needs a
+   * third mode where the non-dominant hand keeps a fixed offset from the
+   * dominant one and travels with it — a change to the two-handed machinery
+   * rather than to this entry. Faking it with a static base would put the fist
+   * through the palm halfway up. */
   HELP: { face: 'polite',
     two: true,
     frames: [kf('A', at('chest', 0, 24), 0, 220), kf('A', at('chest', 0, -18), 0, 280)],
+  },
+  /* The hands meet and then break apart and down — so unlike the other
+   * mirrored signs the separation is the point, and a primitive that only moves
+   * vertically could not express it. Authored rather than generated for that
+   * reason. */
+  EGG: {
+    two: true,
+    frames: [kf('U', at('chest', 22, -20), 16, 200), kf('U', at('chest', -14, 18), 42, 280)],
   },
   LOVE: { face: 'smile',
     two: true,
@@ -319,9 +338,14 @@ const VOCAB = {
     two: true,
     frames: [kf('O', at('chest', 30, -30), -18, 200), kf('O', at('chest', 4, -22), -18, 200), kf('O', at('chest', 30, -30), -18, 240)],
   },
+  /* The edge of the dominant hand chops down onto the upturned palm of the
+   * other, and the contact is the sign. It was `two: true`, which mirrors the
+   * dominant hand's whole path onto the non-dominant one — so both hands
+   * chopped downward in symmetry, never came within 68 units of each other,
+   * and the result read as two palms pressed together rather than as STOP. */
   STOP: { face: 'neg',
-    two: true,
-    frames: [kf('FLAT', at('chest', -14, -60), -4, 200), kf('FLAT', at('chest', -6, -6), -4, 300)],
+    two: 'base',
+    frames: [kf('FLAT', at('chest', 30, -62), -4, 200), kf('FLAT', at('chest', 24, 2), -4, 300)],
   },
   GO: {
     frames: [kf('POINT', at('chest', 34, -50), 30, 200), kf('POINT', at('chest', -34, -20), 46, 280)],
@@ -332,13 +356,15 @@ const VOCAB = {
   HOME: { face: 'smile',
     frames: [kf('O', at('mouth', 20, 14), -14, 240), kf('O', at('cheek', -12, -14), -14, 280)],
   },
+  /* A clap: the dominant palm comes down twice onto the other, which stays put. */
   SCHOOL: {
-    two: true,
-    frames: [kf('FLAT', at('chest', 0, -50), -30, 190), kf('FLAT', at('chest', 0, -14), -6, 170), kf('FLAT', at('chest', 0, -50), -30, 170), kf('FLAT', at('chest', 0, -14), -6, 200)],
+    two: 'base',
+    frames: [kf('FLAT', at('chest', 20, -48), -30, 190), kf('FLAT', at('chest', 20, -12), -6, 170), kf('FLAT', at('chest', 20, -48), -30, 170), kf('FLAT', at('chest', 20, -12), -6, 200)],
   },
+  /* The dominant fist taps the wrist of the other, which is held still. */
   WORK: { face: 'mm',
-    two: true,
-    frames: [kf('S', at('chest', -4, -50), 12, 190), kf('S', at('chest', -4, -16), 12, 170), kf('S', at('chest', -4, -50), 12, 170), kf('S', at('chest', -4, -16), 12, 200)],
+    two: 'base', baseShape: 'S', baseRot: 14,
+    frames: [kf('S', at('chest', 18, -48), 12, 190), kf('S', at('chest', 18, -14), 12, 170), kf('S', at('chest', 18, -48), 12, 170), kf('S', at('chest', 18, -14), 12, 200)],
   },
   FRIEND: { face: 'smile',
     two: true,
@@ -348,9 +374,37 @@ const VOCAB = {
     two: true,
     frames: [kf('F', at('chest', 30, -50), -10, 200), kf('F', at('chest', -18, -30), -10, 300)],
   },
+  /* Both hands open, palms up, held apart with a small shake — the "what?" that
+   * goes with the furrowed brow. It was a single index finger wagging sideways,
+   * which is not a variant of WHAT at all: an upright index shaken side to side
+   * is WHERE, and this file signs WHERE exactly that way three entries down.
+   * The two were the same gesture, 60 units apart, with one fewer wag.
+   *
+   * Palms-up is beyond this renderer, which stores facing as one of two values,
+   * toward the addressee or toward the signer; `in` is the nearer of the two.
+   * See the palm-orientation caveat in the README. */
   WHAT: { face: 'wh',
-    frames: [kf('POINT', at('chest', 40, -40), -12, 190), kf('POINT', at('chest', -20, -34), -12, 190), kf('POINT', at('chest', 40, -40), -12, 220)],
+    two: true,
+    frames: [
+      kf('OPEN', at('chest', -56, -20), -54, 200, undefined, 'in'),
+      kf('OPEN', at('chest', -46, -8), -44, 180, undefined, 'in'),
+      kf('OPEN', at('chest', -56, -20), -54, 240, undefined, 'in'),
+    ],
   },
+  /* Both thumbs up, alternating up and down. Missing entirely before this —
+   * asl.js has always listed WHICH as a WH-word, so the grammar moved it to the
+   * end of the question and furrowed the brow over a fingerspelled W-H-I-C-H. */
+  WHICH: { face: 'wh',
+    two: 'alt',
+    frames: [
+      kf('A', at('chest', -12, -40), -8, 200),
+      kf('A', at('chest', -12, -8), -8, 180),
+      kf('A', at('chest', -12, -40), -8, 220),
+    ],
+  },
+  /* WHO with a possessive, and the possessive half is not expressed — this is
+   * WHO. Better than spelling it, and still not the sign. */
+  WHOSE: { alias: 'WHO' },
   WHERE: { face: 'wh',
     frames: [
       kf('POINT', at('spell', 18, -14), -14, 160),
@@ -365,12 +419,28 @@ const VOCAB = {
   WHY: { face: 'wh',
     frames: [kf('POINT', at('forehead', 8, 10), -16, 220), kf('Y', at('forehead', -18, 56), -30, 280)],
   },
+  /* The dominant index circles once around the tip of the other index and
+   * lands on it. It was one-handed, so the finger it circles was not there and
+   * the contact that ends the sign had nothing to land on. */
   WHEN: { face: 'wh',
-    frames: [kf('POINT', at('spell', 24, -14), -10, 200), kf('POINT', at('spell', -2, -30), -10, 180), kf('POINT', at('spell', -2, -4), -10, 220)],
+    two: 'base', baseShape: 'POINT', baseRot: 24,
+    frames: [
+      kf('POINT', at('chest', 26, -62), -8, 200),
+      kf('POINT', at('chest', 48, -44), -8, 170),
+      kf('POINT', at('chest', 30, -26), -8, 170),
+      kf('POINT', at('chest', 28, -38), -8, 220),
+    ],
   },
+  /* Both bent hands start knuckles together and roll upward to palms up. The
+   * shapes were right but the hands travelled 4 units in total, so the roll
+   * that is the whole sign was invisible — and at x=172 with a mirror at 228
+   * the knuckles were 56 apart and never touched to begin with. */
   HOW: { face: 'wh',
     two: true,
-    frames: [kf('A', at('chest', 0, -30), 160, 220), kf('FLAT', at('chest', 0, -34), 100, 280)],
+    frames: [
+      kf('CLAW', at('chest', 24, -34), 104, 220, undefined, 'in'),
+      kf('OPEN', at('chest', 28, -16), 40, 280, undefined, 'in'),
+    ],
   },
   NOW: {
     two: true,
@@ -386,8 +456,10 @@ const VOCAB = {
   SLEEP: { face: 'sleepy',
     frames: [kf('OPEN', at('eye', 8, -30), 4, 220), kf('O', at('chin', -4, 6), 4, 300)],
   },
+  /* Knowledge is taken off the flat upturned palm of the other hand and put in
+   * the head, so the non-dominant hand is a base that stays where it is. */
   LEARN: { face: 'mm',
-    two: true,
+    two: 'base', baseFrom: 'first',
     frames: [kf('CLAW', at('chest', 4, 10), -4, 200), kf('O', at('forehead', -6, 24), -10, 300)],
   },
   UNDERSTAND: { face: 'aha',
@@ -530,9 +602,15 @@ function mk(shape, loc, mv, o) {
                [h1, 13, 0, 7, D * 0.55], [h2, -13, 0, -7, D * 0.7]]; break;
     case 'twist':
       steps = [[h1, 0, 0, -40, D], [h2, 0, -4, 34, D]]; break;
+    /* Repeat. It alternates the two handshapes and, now, moves a little while
+     * doing it — because a spec with one handshape makes h2 the same as h1, and
+     * with no displacement that produced four identical frames: a sign frozen
+     * solid. Twenty-odd words were motionless this way, CITY and TALK and
+     * LAUGH among them. The oscillation is small enough not to disturb the
+     * signs that do change handshape. */
     case 'rep':
-      steps = [[h1, 0, 0, 0, D * 0.75], [h2, 0, 0, 0, D * 0.7],
-               [h1, 0, 0, 0, D * 0.7], [h2, 0, 0, 0, D * 0.85]]; break;
+      steps = [[h1, 0, -7, 0, D * 0.75], [h2, 0, 4, 0, D * 0.7],
+               [h1, 0, -7, 0, D * 0.7], [h2, 0, 4, 0, D * 0.85]]; break;
     case 'arc':
       steps = [[h1, 24, 10, 12, D], [h2, -28, -16, -16, D]]; break;
     case 'alt':
@@ -673,7 +751,6 @@ const BUILT = {
   RICE: ['R', 'chest', 'up', { two: 'base' }],
   APPLE: ['X', 'cheek', 'twist'],
   BANANA: ['POINT>O', 'spell', 'down', { two: 'base' }],
-  EGG: ['U', 'chest', 'down', { two: 'mirror' }],
   MEAT: ['F', 'chest', 'tap', { two: 'base' }],
   FISH: ['FLAT', 'spell', 'shake', { rot: -70 }],
   CHICKEN: ['G', 'mouth', 'rep'],
@@ -740,7 +817,9 @@ const BUILT = {
   BEGIN: ['POINT', 'chest', 'twist', { two: 'base' }],
   OPEN: ['B', 'chest', 'out', { two: 'mirror' }],
   CLOSE: ['B', 'chest', 'in', { two: 'mirror' }],
-  MEET: ['POINT', 'chest', 'in', { two: 'mirror' }],
+  // Offset toward the midline, or the mirrored hands converge on empty air
+  // either side of it and the two fingers never meet.
+  MEET: ['POINT', 'chest', 'in', { two: 'mirror', dx: 24 }],
   LEAVE: ['OPEN>S', 'chest', 'out', { two: 'mirror' }],
   ARRIVE: ['FLAT', 'chest', 'in', { two: 'base' }],
   LIVE: ['A', 'belly', 'up', { two: 'mirror' }],
@@ -852,7 +931,7 @@ const BUILT = {
   CHAIR: ['U', 'chest', 'tap', { two: 'base', baseShape: 'U' }],
   BED: ['FLAT', 'cheek', 'hold', { rot: -30 }],
   CLOTHES: ['OPEN', 'chest', 'down', { two: 'mirror' }],
-  SHOES: ['S', 'chest', 'tap', { two: 'mirror' }],
+  SHOES: ['S', 'chest', 'tap', { two: 'mirror', dx: 22 }],
   SHIRT: ['F', 'chest', 'rep'],
   HAT: ['FLAT', 'forehead', 'tap'],
   BAG: ['CLAW', 'side', 'hold'],
@@ -879,7 +958,7 @@ const BUILT = {
   FIRE: ['OPEN', 'chest', 'up', { two: 'mirror' }],
 
   /* connectives & quantity */
-  WITH: ['A', 'chest', 'in', { two: 'mirror' }],
+  WITH: ['A', 'chest', 'in', { two: 'mirror', dx: 24 }],
   WITHOUT: ['A>OPEN', 'chest', 'out', { two: 'mirror' }],
   FOR: ['POINT', 'forehead', 'out'],
   ABOUT: ['POINT', 'chest', 'circle', { two: 'base', baseShape: 'O' }],
@@ -975,15 +1054,87 @@ for (const w of Object.keys(BUILT)) {
   };
 }
 
-/* Legacy two-handed entries were authored before the second hand was animated:
- * mirror the dominant track onto the non-dominant one. */
+/* Legacy two-handed entries were authored before the second hand was animated.
+ *
+ * `two: true` mirrors the dominant track onto the non-dominant hand, which is
+ * right for a symmetric sign and wrong for every sign where one hand is a
+ * stationary base the other acts on — there, mirroring produces two hands
+ * moving in sympathy that never touch, and the contact was the sign.
+ * `two: 'base'` is the other case: the non-dominant hand holds still. Where it
+ * sits is the frame the two hands make contact in, and that is not always the
+ * same end of the sign — STOP arrives on the base and LEARN departs from it, so
+ * placing LEARN's base from the last frame parked the palm up beside the
+ * forehead. `baseFrom: 'first'` is for the departing case. */
 for (const w of Object.keys(VOCAB)) {
   const e = VOCAB[w];
-  if (!e.frames || e.two !== true) continue;
+  if (!e.frames || !e.two) continue;
   if (e.frames.some((f) => f.p2)) continue;
-  e.frames = e.frames.map((f) => Object.assign({}, f, {
-    p2: f.p, x2: MIRROR(f.x), y2: f.y, z2: f.z, r2: f.r,
-  }));
+  if (e.two === 'base') {
+    const ref = e.baseFrom === 'first' ? e.frames[0] : e.frames[e.frames.length - 1];
+    const bx = 200 + (200 - ref.x) * 0.42;
+    const by = ref.y + 18;
+    e.frames = e.frames.map((f) => Object.assign({}, f, {
+      p2: e.baseShape || 'FLAT', x2: bx, y2: by, z2: f.z + 0.03, r2: 62,
+    }));
+  } else if (e.two === 'alt') {
+    // Mirrored across the midline, but in opposite phase: as one rises the
+    // other falls, which is what WHICH and similar alternating signs need.
+    const mid = e.frames.reduce((a, f) => a + f.y, 0) / e.frames.length;
+    e.frames = e.frames.map((f) => Object.assign({}, f, {
+      p2: f.p, x2: MIRROR(f.x), y2: mid - (f.y - mid), z2: f.z, r2: f.r,
+    }));
+  } else if (e.two === true) {
+    e.frames = e.frames.map((f) => Object.assign({}, f, {
+      p2: f.p, x2: MIRROR(f.x), y2: f.y, z2: f.z, r2: f.r,
+    }));
+  }
+}
+
+/* Withheld: generated forms that are provably not this word's sign.
+ *
+ * Each of these shares an animation with at least one other word — six of them
+ * render as the same gesture — so at most one of any group can be right and
+ * there is nothing in the data saying which. A wrong sign is not a rough sign;
+ * it is a different word, confidently delivered.
+ *
+ * Fingerspelling is the correct fallback, not a failure: ASL fingerspells, and
+ * F-U-L-L is honest where a confident gesture meaning something else is not.
+ * So these are removed from the vocabulary and spelled instead. Accuracy goes
+ * up, coverage goes down, and coverage was never the honest number.
+ *
+ * Every one is a generated entry — no hand-authored sign collides — so nothing
+ * anybody wrote deliberately is being discarded here. Take a word off this list
+ * when its real form has been authored and checked, not before. See
+ * audit-signs.js, check A, which is what found them.
+ */
+const WITHHELD = [
+  'AFTERNOON', 'ALSO', 'ARRIVE', 'BEFORE', 'BIG', 'BIRD', 'BREAD',
+  'BREAKFAST', 'BUILD', 'BUT', 'CAKE', 'CHEESE', 'CHICKEN', 'CLEAN',
+  'COFFEE', 'COLD', 'CONGRATULATIONS', 'COOK', 'DIFFERENT', 'DINNER',
+  'DRIVE', 'EARLY', 'EASY', 'EVENING', 'EXCUSE', 'FOR', 'FULL', 'GERMAN',
+  'GERMANY', 'HEALTHY', 'HUG', 'LEAVE', 'LESS', 'LONG', 'LUNCH', 'MAYBE',
+  'MINUTE', 'MONEY', 'NEIGHBOR', 'NEW', 'NICE', 'NIGHT', 'OFTEN',
+  'PAPER', 'PAY', 'PULL', 'PUSH', 'ROOM', 'RUN', 'SAFE', 'SEND', 'SLOW',
+  'SMART', 'SMILE', 'SOME', 'SOMETIMES', 'SOUP', 'STREET', 'STRONG',
+  'SWIM', 'TABLE', 'TALL', 'THAN', 'TONIGHT', 'TOUCH', 'TRUE', 'WAIT',
+  'WEEK', 'WELCOME', 'WINDOW', 'YEAR',
+];
+for (const w of WITHHELD) delete VOCAB[w];
+
+/* Agent nouns are compounds, and were being built as though they were not.
+ *
+ * STUDENT is LEARN + the PERSON marker; TEACHER is TEACH + PERSON. Generated
+ * from the primitives each came out as a single two-frame gesture with the
+ * marker missing entirely — STUDENT was a LEARN that stopped at the chest
+ * instead of reaching the forehead and never said "person" at all, which left
+ * it identical to nothing in particular, and TEACHER came out byte-identical
+ * to TEACH. Both halves already existed; they were simply never joined. */
+for (const [word, verb] of [['STUDENT', 'LEARN'], ['TEACHER', 'TEACH']]) {
+  if (!VOCAB[verb] || !VOCAB.PERSON) continue;
+  VOCAB[word] = {
+    face: VOCAB[verb].face,
+    frames: VOCAB[verb].frames.concat(VOCAB.PERSON.frames),
+  };
 }
 
 // Alias resolution
@@ -1011,7 +1162,7 @@ const NUMBER_WORDS = {
   FIVE: '5', SIX: '6', SEVEN: '7', EIGHT: '8', NINE: '9',
 };
 
-window.SL = { POSES, VOCAB, A_, FINGERSPELL_MOTION, NUMBER_WORDS, kf, at,
+window.SL = { POSES, VOCAB, WITHHELD, A_, FINGERSPELL_MOTION, NUMBER_WORDS, kf, at,
               PALM, PALM_DEFAULT, PALM_REST, facing };
 
 })();

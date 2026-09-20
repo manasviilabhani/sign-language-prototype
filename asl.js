@@ -181,10 +181,18 @@ function toGloss(text) {
     // Set here rather than downstream so the flag is decided while the word's
     // own resolution is in hand, not re-derived from the reordered stream.
     t.fingerspell = willFingerspell(t.sign || t.gloss);
-    /* Known vocabulary whose sign has not been built yet, as opposed to a word
-     * the lexicon has never heard of. Both fingerspell today; only one of them
-     * is a bug. */
-    if (t.fingerspell && NO_SIGN_YET.indexOf(t.sign || t.gloss) >= 0) t.pending = true;
+    /* Known vocabulary with no usable sign, as opposed to a word the lexicon
+     * has never heard of. Both fingerspell; only one of them is a bug.
+     *
+     * Two ways to land here. NO_SIGN_YET is a sign nobody has authored.
+     * signs.js WITHHELD is one that was authored, generated wrongly, and is
+     * deliberately being spelled instead of signed incorrectly — asking
+     * signs.js rather than keeping a second copy of that list, so the two
+     * cannot drift. */
+    const w = t.sign || t.gloss;
+    const withheld = window.SL && window.SL.WITHHELD;
+    if (t.fingerspell && (NO_SIGN_YET.indexOf(w) >= 0 ||
+        (withheld && withheld.indexOf(w) >= 0))) t.pending = true;
     g.push(t);
     return t;
   };
