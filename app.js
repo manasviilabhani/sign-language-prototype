@@ -43,7 +43,7 @@ function tokenize(text) {
                face: entry.face, palm: entry.palm, marker: g.marker, gloss: g.gloss };
     }
     return { text: label, kind: 'spell', letters: g.gloss.replace(/[^A-Z0-9]/g, '').split(''),
-             marker: g.marker, gloss: g.gloss };
+             marker: g.marker, gloss: g.gloss, pending: g.pending };
   });
   return { tokens, trace, english, type };
 }
@@ -112,7 +112,12 @@ function renderPlan(tokens) {
     el.dataset.idx = i;
     el.textContent = t.text;
     const tag = document.createElement('em');
-    const kind = t.kind === 'sign' ? (t.two ? 'sign · 2-handed' : 'sign') : 'fingerspelled';
+    /* "sign pending" is a word the vocabulary knows and cannot sign yet —
+     * either nobody has authored it, or its generated form was withheld for
+     * colliding with another word. Worth distinguishing on screen from a name,
+     * which is fingerspelled because that is the correct thing to do with it. */
+    const kind = t.kind === 'sign' ? (t.two ? 'sign · 2-handed' : 'sign')
+      : (t.pending ? 'fingerspelled · sign pending' : 'fingerspelled');
     const marker = t.markerLabel;
     tag.textContent = marker ? kind + ' · ' + marker : kind;
     el.appendChild(tag);
