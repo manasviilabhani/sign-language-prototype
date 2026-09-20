@@ -22,7 +22,8 @@ import re
 import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
-SCRIPTS = ['signs.js', 'lexicon.js', 'asl.js', 'face.js', 'hand.js', 'app.js', 'flat.js']
+SCRIPTS = ['signs.js', 'lexicon.js', 'asl.js', 'face.js', 'hand.js', 'docs.js',
+           'app.js', 'flat.js']
 # 3D is the default on the real site, but Three.js is an ES module that cannot
 # be inlined, so the single-file build pins itself to the flat renderer rather
 # than sitting through the fallback timeout with an empty stage.

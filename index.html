@@ -216,6 +216,19 @@
   .muted { color: var(--muted); }
 
   .examples { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+  /* Document upload. The drop zone is a label wrapping a hidden file input, so
+     one element is both the click target and the drop target and the keyboard
+     still reaches it. */
+  .drop { display: block; border: 1.5px dashed var(--border); border-radius: 10px;
+          padding: 16px 12px; text-align: center; cursor: pointer; color: var(--muted);
+          font-size: 13px; transition: border-color .15s, background .15s; }
+  .drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+  .drop input { display: none; }
+  .drop b { color: var(--text); font-weight: 600; }
+  #docStat { font-size: 12.5px; margin: 10px 0 0; }
+  #docStat .warn { color: var(--live); font-weight: 600; }
+  .bar { height: 4px; border-radius: 3px; background: var(--border); overflow: hidden; margin-top: 10px; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
   .example { background: var(--accent-soft); color: var(--accent); border: 0; font-size: 13px; padding: 6px 11px; font-weight: 550; }
 
   #vocab { font-size: 12.5px; color: var(--muted); line-height: 1.9; word-spacing: 2px; }
@@ -293,6 +306,20 @@
         </div>
       </div>
 
+      <div class="panel">
+        <h2>Or sign a document</h2>
+        <label class="drop" id="drop">
+          <input type="file" id="docFile" accept=".txt,.md,.markdown,.csv,.text,.log,.docx">
+          <b>Choose a file</b> or drop it here<br>.txt · .md · .docx
+        </label>
+        <p id="docStat" class="muted">No document loaded.</p>
+        <div class="bar" id="docBar" hidden><i></i></div>
+        <div class="row" style="margin-top:10px">
+          <button id="docSign" disabled>Sign document</button>
+          <button id="docStop" class="ghost" disabled>■ Stop</button>
+        </div>
+      </div>
+
 
 
 
@@ -306,6 +333,7 @@
 <script src="asl.js"></script>
 <script src="face.js"></script>
 <script src="hand.js"></script>
+<script src="docs.js"></script>
 <script src="app.js"></script>
 <script src="flat.js"></script>
 <script type="module" src="scene3d.js"></script>

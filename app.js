@@ -168,9 +168,148 @@ function setExpanded(on) {
 player.onItem = (idx) => highlight(idx);
 player.onEnd = () => {
   highlight(-1);
-  if (state.queue.length) signText(state.queue.shift());
-  else $('status').textContent = state.listening ? 'listening…' : 'idle';
+  if (state.queue.length) {
+    signText(state.queue.shift());
+    docTick();
+  } else {
+    docTick(true);
+    $('status').textContent = state.listening ? 'listening…' : 'idle';
+  }
 };
+
+/* ---------------------------------------------------------------- *
+ * Signing a document
+ *
+ * A document is signed one sentence at a time through the queue that already
+ * exists, not as one long timeline. The gloss rules work over a clause — tense,
+ * topicalisation and marker scope are all sentence-level — so handing the whole
+ * file to toGloss at once would produce a single absurd gloss with one brow
+ * raise held over the lot of it.
+ * ---------------------------------------------------------------- */
+
+const doc = { list: [], done: 0 };
+
+/* What the document will look like once signed, shown before any of it is.
+ *
+ * A document is where this vocabulary's limits stop being an abstraction:
+ * typed input is short and tends to stay near the 400-odd words that have
+ * signs, while arbitrary prose does not, and the honest number is often that
+ * most of it will be spelled letter by letter. Better to say so up front than
+ * to let someone watch eight minutes of fingerspelling and work it out. */
+function coverage(list) {
+  let sign = 0;
+  let spell = 0;
+  let ms = 0;
+  let sampled = 0;
+  const missing = new Map();
+  list.forEach((sentence, i) => {
+    const tokens = tokenize(sentence).tokens;
+    for (const t of tokens) {
+      if (t.kind === 'spell') {
+        spell++;
+        missing.set(t.text, (missing.get(t.text) || 0) + 1);
+      } else sign++;
+    }
+    // Timing from a real timeline, but only for the first few — building one
+    // per sentence is wasted work on a long file just to print an estimate.
+    if (i < 12) { ms += buildTimeline(sentence).tl.duration; sampled += tokens.length; }
+  });
+  const total = sign + spell;
+  const top = Array.from(missing.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  return { sign, spell, total, top,
+           seconds: sampled ? Math.round((ms / sampled) * total / 1000) : 0 };
+}
+
+function clock(sec) {
+  if (sec < 60) return sec + 's';
+  return Math.floor(sec / 60) + 'm ' + String(sec % 60).padStart(2, '0') + 's';
+}
+
+function docTick(finished) {
+  const total = doc.list.length;
+  if (!total) return;
+  if (!finished) doc.done = Math.min(total, doc.done + 1);
+  const at = finished ? total : doc.done;
+  $('docBar').firstElementChild.style.width = Math.round((at / total) * 100) + '%';
+  if (finished) {
+    $('docStop').disabled = true;
+    $('docSign').disabled = false;
+    $('docStat').innerHTML = 'Signed all ' + total + ' sentences.';
+    doc.done = 0;
+  } else {
+    $('docStat').innerHTML = 'Signing sentence <b>' + at + '</b> of ' + total + '.';
+  }
+}
+
+function loadDoc(file) {
+  if (!window.SLDoc) return;
+  $('docStat').textContent = 'Reading ' + file.name + '…';
+  $('docSign').disabled = true;
+  window.SLDoc.extract(file).then((text) => {
+    const list = window.SLDoc.sentences(text);
+    doc.list = list;
+    doc.done = 0;
+    if (!list.length) {
+      $('docStat').innerHTML = '<span class="warn">Nothing signable in ' + file.name + '.</span>';
+      return;
+    }
+    const c = coverage(list);
+    const pct = Math.round((c.spell / Math.max(1, c.total)) * 100);
+    const worst = c.top.map((e) => e[0]).join(', ');
+    $('docStat').innerHTML =
+      '<b>' + file.name + '</b> — ' + list.length + ' sentences, ' + c.total + ' signs, ' +
+      'about ' + clock(c.seconds) + ' to sign.<br>' +
+      '<span class="' + (pct > 40 ? 'warn' : 'muted') + '">' + pct +
+      '% fingerspelled</span>' + (worst ? ' <span class="muted">— most often: ' + worst + '</span>' : '');
+    $('docSign').disabled = false;
+    $('docBar').hidden = false;
+    $('docBar').firstElementChild.style.width = '0%';
+  }).catch((err) => {
+    $('docStat').innerHTML = '<span class="warn">' + (err && err.message ? err.message : 'could not read that file') + '</span>';
+  });
+}
+
+if ($('docFile') !== NO_EL) {
+  $('docFile').addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (f) loadDoc(f);
+  });
+  const drop = $('drop');
+  for (const ev of ['dragenter', 'dragover']) {
+    drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); });
+  }
+  for (const ev of ['dragleave', 'drop']) {
+    drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); });
+  }
+  drop.addEventListener('drop', (e) => {
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) loadDoc(f);
+  });
+
+  $('docSign').addEventListener('click', () => {
+    if (!doc.list.length) return;
+    doc.done = 0;
+    // The first sentence starts now; the rest go through the same queue that
+    // already carries appended speech, so onEnd drains them in order.
+    state.queue = doc.list.slice(1);
+    $('docSign').disabled = true;
+    $('docStop').disabled = false;
+    signText(doc.list[0]);
+    docTick(false);                 // counts the sentence now playing
+  });
+
+  $('docStop').addEventListener('click', () => {
+    state.queue.length = 0;
+    player.pause();
+    highlight(-1);
+    doc.done = 0;
+    $('docBar').firstElementChild.style.width = '0%';
+    $('docStop').disabled = true;
+    $('docSign').disabled = false;
+    $('docStat').innerHTML = 'Stopped. ' + doc.list.length + ' sentences loaded.';
+    $('status').textContent = 'idle';
+  });
+}
 
 /* ---------------------------------------------------------------- *
  * Speech recognition
