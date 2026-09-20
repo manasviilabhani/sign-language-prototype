@@ -17,6 +17,13 @@ const ST = [0, 0, 0]; // straight
 const FIST = [92, 100, 72]; // fully folded
 const HALF = [72, 88, 44]; // folded to touch the thumb
 const CURL = [36, 36, 22]; // relaxed C curve
+/* The slack curl of a hand hanging at the side. CURL is a deliberate C shape —
+ * it has to be, because the letter C is made of it — and a hand doing nothing
+ * is not holding a shape at all: at 94 degrees of total flexion the resting
+ * fingers hooked hard enough that the hand read as a claw rather than as a hand
+ * at rest. 62 degrees, spread over three joints, is what a hand does when
+ * nothing is asked of it. */
+const LIMP = [22, 26, 14];
 const HOOK = [14, 92, 62]; // straight knuckle, bent tip
 const CLAW = [26, 52, 34];
 
@@ -39,7 +46,11 @@ function pose(o) {
  * ---------------------------------------------------------------- */
 
 const POSES = {
-  REST: pose({ f: [CURL, CURL, CURL, CURL], th: [22, 16], ts: 16 }),
+  /* Spread is nearly closed and the thumb barely abducted: fingers fan when
+   * they are doing something, and a hand at rest is not. The default spread of
+   * 16 degrees across the four fingers was enough to read as a deliberate
+   * splay. */
+  REST: pose({ f: [LIMP, LIMP, LIMP, LIMP], s: [3, 1, -1, -4], th: [20, 14], ts: 10 }),
   OPEN: pose({ f: [ST, ST, ST, ST], s: [16, 5, -6, -17], th: [4, 2], ts: 52 }),
   FLAT: pose({ f: [ST, ST, ST, ST], s: [3, 1, -2, -5], th: [40, 18], ts: -18 }),
   CLAW: pose({ f: [CLAW, CLAW, CLAW, CLAW], s: [14, 4, -5, -15], th: [18, 22], ts: 34 }),
@@ -105,8 +116,25 @@ const A_ = {
   belly: [176, 350, 0.19],
   side: [110, 330, 0.22],
   out: [88, 260, 0.42],
-  rest: [126, 402, 0.10],
-  rest2: [274, 402, 0.10],   // non-dominant hand at rest
+  /* Hands at rest. Lowered from y=402, and that is a 3D fix rather than a
+   * restyling: the arm is 0.446 m of bone because the furthest sign has to be
+   * reachable, and a wrist parked only 0.35 m from the shoulder folds that arm
+   * to a 102-degree elbow — the figure stood with its elbows winged out and its
+   * hands hovering in front of its thighs as though holding a tray. At 438 the
+   * wrist is 0.42 m out, the elbow opens to about 140 degrees, and the arms
+   * simply hang. The flat renderer draws its hips at 424 and its legs to 858,
+   * so this is still against the thigh there too.
+   *
+   * x moved out as well, from 126 to 102, and that one is about the wrist
+   * rather than the elbow. The elbow ends up at x = -0.205 whatever the hand
+   * does, so a wrist parked at -0.141 left the forearm running 14 degrees
+   * inward — and a hand in line with a forearm that leans is a hand that leans.
+   * Worse, the palm has to stay perpendicular to the fingers, so those same 14
+   * degrees tipped the palm 14 degrees skyward and the hand read as cupped,
+   * begging. Out at 102 the wrist hangs under its own elbow, the forearm is
+   * within 5 degrees of vertical, and the palm comes level. */
+  rest: [102, 438, 0.085],
+  rest2: [298, 438, 0.085],  // non-dominant hand at rest
 };
 const DEFAULT_Z = 0.26;
 
@@ -889,6 +917,50 @@ const BUILT = {
   WELCOME: ['FLAT', 'chest', 'in', { face: 'smile' }],
   EXCUSE: ['FLAT', 'chest', 'out', { two: 'base' }],
   CONGRATULATIONS: ['S', 'chest', 'shake', { two: 'mirror', face: 'happy' }],
+
+  /* places
+   *
+   * Place names are not a category you can fingerspell your way out of. ASL has
+   * lexical signs for the common ones, and spelling NEW YORK letter by letter is
+   * as wrong as spelling W-A-T-E-R. Worse, without an entry here the compound
+   * fallback in app.js would resolve NEW-YORK to its first element and sign
+   * NEW on its own — a quieter failure than spelling, and a more misleading one.
+   *
+   * Two caveats that matter more for these than for the rest of the table.
+   *
+   * US city and state signs are heavily regional and mostly initialised — the
+   * handshape is the first letter of the English word, on a generic path — so
+   * these are one variant among several rather than the sign.
+   *
+   * And for countries, ASL has been moving away from its own coinages toward
+   * the sign Deaf people in that country use for themselves, several of the
+   * older ASL versions being offensive. That shift is why this list stops where
+   * it does: CHINA, JAPAN, INDIA, MEXICO, RUSSIA and AFRICA are deliberately
+   * absent rather than guessed at, because getting one of those wrong is a
+   * different kind of wrong from getting BOSTON wrong. They want checking
+   * against a current source, ideally a Deaf signer, before they go in.
+   */
+  AMERICA: ['CLAW', 'chest', 'circle', { two: 'mirror' }],
+  USA: ['CLAW', 'chest', 'circle', { two: 'mirror' }],
+  'UNITED-STATES': ['CLAW', 'chest', 'circle', { two: 'mirror' }],
+  CANADA: ['A', 'chest', 'tap', { dx: -18 }],
+  // ENGLAND and ENGLISH share a sign: the dominant hand over the back of the
+  // non-dominant, both drawn back toward the body.
+  ENGLAND: ['CURL', 'chest', 'in', { two: 'base' }],
+  ENGLISH: ['CURL', 'chest', 'in', { two: 'base' }],
+  BRITAIN: ['CURL', 'chest', 'in', { two: 'base' }],
+  FRANCE: ['F', 'chest', 'twist'],
+  FRENCH: ['F', 'chest', 'twist'],
+  GERMANY: ['OPEN', 'chest', 'wiggle', { two: 'mirror' }],
+  GERMAN: ['OPEN', 'chest', 'wiggle', { two: 'mirror' }],
+  // Y handshape brushing back and forth across the upturned base palm.
+  'NEW-YORK': ['Y', 'chest', 'shake', { two: 'base' }],
+  // Shares its form with GOLD: Y handshape out from the earlobe.
+  CALIFORNIA: ['Y', 'cheek', 'out'],
+  TEXAS: ['X', 'chest', 'arc'],
+  CHICAGO: ['C', 'chest', 'arc'],
+  BOSTON: ['B', 'chest', 'down'],
+  WASHINGTON: ['W', 'chest', 'circle', { dy: -26 }],
 };
 
 for (const w of Object.keys(BUILT)) {

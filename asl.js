@@ -21,39 +21,41 @@
 'use strict';
 
 /* ---------------------------------------------------------------- *
- * Lexicon — a rough part-of-speech table over the sign vocabulary
+ * Lexicon
+ *
+ * The word lists live in lexicon.js, which must load first — see the script
+ * order in index.html and SCRIPTS in build-standalone.py. They are pulled in
+ * by name here so the rules below read exactly as they did when the lists were
+ * inline, and so a missing lexicon fails loudly at load rather than as a
+ * mysterious empty-list no-op inside a rule.
  * ---------------------------------------------------------------- */
 
-const TIME = ['NOW', 'TODAY', 'TOMORROW', 'YESTERDAY', 'TONIGHT', 'MORNING', 'NIGHT', 'LATER'];
-const WH = ['WHAT', 'WHERE', 'WHO', 'WHY', 'WHEN', 'HOW', 'WHICH', 'WHOSE'];
-const PRONOUN = { I: 'IX-me', ME: 'IX-me', YOU: 'IX-you', WE: 'IX-we' };
-const POSSESSIVE = ['MY', 'MINE', 'YOUR', 'OUR'];
-const NOUNS = ['WATER', 'FOOD', 'NAME', 'HOME', 'SCHOOL', 'FRIEND', 'FAMILY', 'PEOPLE',
-  'LANGUAGE', 'SIGN-LANGUAGE', 'SIGN', 'WORK', 'COFFEE'];
-
-// ASL verbs do not inflect, so English irregular pasts map back to the base
-// sign and the tense is carried separately.
-const IRREGULAR_PAST = {
-  WENT: 'GO', ATE: 'EAT', DRANK: 'DRINK', SAW: 'SEE', CAME: 'COME', KNEW: 'KNOW',
-  UNDERSTOOD: 'UNDERSTAND', SLEPT: 'SLEEP', MADE: 'MAKE', GAVE: 'GIVE', TOOK: 'TAKE',
-  TOLD: 'TELL', SAID: 'SAY', FELT: 'FEEL', LEFT: 'LEAVE', MET: 'MEET', TAUGHT: 'TEACH',
-  LEARNT: 'LEARN', HELPED: 'HELP', WANTED: 'WANT', LOVED: 'LOVE',
-};
-const FUTURE_CUE = ['WILL', "'LL", 'SHALL', 'GONNA'];
-const VERBS = ['EAT', 'DRINK', 'GO', 'COME', 'HELP', 'LOVE', 'WANT', 'KNOW', 'UNDERSTAND',
-  'LEARN', 'SEE', 'SLEEP', 'STOP', 'THANK', 'SIGN', 'WORK', 'PLEASE'];
-const ADJECTIVES = ['GOOD', 'BAD', 'HAPPY', 'SAD', 'ANGRY', 'TIRED', 'HUNGRY', 'DEAF', 'OK', 'MORE'];
-
-// Dropped because ASL has no equivalent — not because the sign is missing.
-const ARTICLES = ['A', 'AN', 'THE'];
-const COPULA = ['IS', 'AM', 'ARE', 'WAS', 'WERE', 'BE', 'BEEN', 'BEING'];
-const DUMMY_AUX = ['DO', 'DOES', 'DID'];
-const NEGATIVE = ['NOT', "DON'T", 'DONT', "DOESN'T", 'DOESNT', "DIDN'T", 'DIDNT',
-  "CAN'T", 'CANT', 'CANNOT', 'NEVER', 'NO', 'NOTHING', 'NONE'];
-const PAST_CUE = ['WAS', 'WERE', 'DID', 'HAD', "DIDN'T", 'DIDNT'];
+const L = window.SLLEX;
+const PRONOUN = L.PRONOUN;
+const POSSESSIVE = L.POSSESSIVE;
+const REFLEXIVE = L.REFLEXIVE;
+const SIGN_FOR = L.SIGN_FOR;
+const WH = L.WH;
+const TIME = L.TIME;
+const NUMBERS = L.NUMBERS;
+const VERBS = L.VERBS;
+const IRREGULAR_PAST = L.IRREGULAR_PAST;
+const DITRANSITIVE = L.DITRANSITIVE;
+const NOUNS = L.NOUNS;
+const PLACES = L.PLACES;
+const ADJECTIVES = L.ADJECTIVES;
+const ARTICLES = L.ARTICLES;
+const COPULA = L.COPULA;
+const DUMMY_AUX = L.DUMMY_AUX;
+const FUTURE_CUE = L.FUTURE_CUE;
+const NEGATIVE = L.NEGATIVE;
+const PAST_CUE = L.PAST_CUE;
+const YN_STARTERS = L.YN_STARTERS;
+const PHRASES = L.PHRASES;
 
 const isVerb = (w) => VERBS.includes(w);
 const isNoun = (w) => NOUNS.includes(w);
+const isAdj = (w) => ADJECTIVES.includes(w);
 
 /* ---------------------------------------------------------------- *
  * Rule engine
@@ -71,13 +73,36 @@ function normalize(text) {
  * a lookup and settles it: a known sign is never inflection. */
 function isSign(w) {
   const V = window.SL && window.SL.VOCAB;
-  return !!(V && V[w]);
+  return !!(V && V[w]) || isNumberSign(w);
+}
+
+/* A number is not in VOCAB — it is signed straight off a digit handshape, and
+ * signs.js keeps that table. Asking it rather than hard-coding a range here
+ * means that when 10..20 are added there (they need their own forms; ASL does
+ * not build them by counting digits) everything downstream starts telling the
+ * truth about them with no change to this file. */
+function isNumberSign(w) {
+  const N = window.SL && window.SL.NUMBER_WORDS;
+  return !!(N && N[w]);
+}
+
+/* Mirrors lookup() in app.js, including its compound fallback, so the
+ * fingerspell flag agrees with what the animator will actually do. If that
+ * function's resolution order changes, this has to follow it. */
+function willFingerspell(sign) {
+  if (!sign) return true;
+  if (isSign(sign)) return false;
+  if (sign.indexOf('-') >= 0) {
+    const parts = sign.split('-');
+    if (isSign(parts[parts.length - 1]) || isSign(parts[0])) return false;
+  }
+  return true;
 }
 
 // Strip English inflection the way ASL does — tense and number come from
 // separate signs, not from the verb.
 function stem(w) {
-  if (isSign(w)) return w;
+  if (isSign(w) || NUMBERS.includes(w)) return w;
   if (w.length > 4 && w.endsWith('ING')) return w.slice(0, -3);
   if (w.length > 3 && w.endsWith('ED')) return w.slice(0, -2);
   if (w.length > 3 && w.endsWith('S') && !w.endsWith('SS')) return w.slice(0, -1);
@@ -92,8 +117,8 @@ function toGloss(text) {
   const isQuestionMark = /\?\s*$/.test(raw);
   let words = raw.replace(/\?/g, '').split(' ').filter(Boolean);
 
-  // Multi-word signs collapse before anything else reorders them.
-  const PHRASES = [['SIGN', 'LANGUAGE'], ['THANK', 'YOU'], ['GOOD', 'BYE']];
+  // Multi-word signs collapse before anything else reorders them. See PHRASES
+  // in lexicon.js for why each one needs a sign of its own.
   for (const ph of PHRASES) {
     for (let i = 0; i <= words.length - ph.length; i++) {
       if (ph.every((w, j) => words[i + j] === w)) {
@@ -136,14 +161,50 @@ function toGloss(text) {
 
   /* -- negation: one NOT before the predicate, head shake to the end -- */
   let g = [];
-  for (const w of kept) {
+  const push = (t) => {
+    // Set here rather than downstream so the flag is decided while the word's
+    // own resolution is in hand, not re-derived from the reordered stream.
+    t.fingerspell = willFingerspell(t.sign || t.gloss);
+    g.push(t);
+    return t;
+  };
+  for (let i = 0; i < kept.length; i++) {
+    const w = kept[i];
     if (NEGATIVE.includes(w)) {
       // "no" answering a question stays as the sign NO; everything else is NOT
-      g.push({ gloss: kept.length === 1 && w === 'NO' ? 'NO' : 'NOT', sign: kept.length === 1 && w === 'NO' ? 'NO' : 'NOT' });
+      const n = kept.length === 1 && w === 'NO' ? 'NO' : 'NOT';
+      push({ gloss: n, sign: n });
       continue;
     }
-    const s = isSign(w) ? w : (IRREGULAR_PAST[w] || stem(w));
-    g.push({ gloss: s, sign: s, english: w });
+
+    /* Pronouns and possessives are settled here, in the input's own order,
+     * rather than in a pass at the end — because HER is both an object pronoun
+     * and a possessive, and the only thing that separates them is what follows
+     * it. By the end of this function that evidence is gone: topicalising
+     * "I like her book" fronts BOOK and strands HER with nothing after it, at
+     * which point the possessive is indistinguishable from "I like her". */
+    const next = kept[i + 1];
+    const prev = kept[i - 1];
+    const prevBase = IRREGULAR_PAST[prev] || prev;
+    /* Possessive only if a noun phrase actually follows — a bare "not a verb"
+     * test read "I saw her yesterday" as POSS-she, because YESTERDAY is a time
+     * sign rather than a verb. And even a following noun is not enough after a
+     * verb that takes two objects: in "I gave her water", HER is who the water
+     * went to, not whose water it is. */
+    const herPossessive = w === 'HER' && next !== undefined &&
+      (isNoun(next) || isAdj(next)) && !DITRANSITIVE.includes(prevBase);
+
+    if (REFLEXIVE[w]) {
+      push({ gloss: w, display: REFLEXIVE[w], sign: SIGN_FOR[w] || w, english: w });
+    } else if (POSSESSIVE[w] || herPossessive) {
+      push({ gloss: w, display: herPossessive ? 'POSS-she' : POSSESSIVE[w],
+             sign: SIGN_FOR[w] || w, english: w, poss: true });
+    } else if (PRONOUN[w]) {
+      push({ gloss: w, display: PRONOUN[w], sign: SIGN_FOR[w] || w, english: w });
+    } else {
+      const sg = isSign(w) ? w : (IRREGULAR_PAST[w] || stem(w));
+      push({ gloss: sg, sign: sg, english: w });
+    }
   }
   if (hasNeg) note('negation', 'NOT + head shake over the rest of the clause');
 
@@ -155,7 +216,7 @@ function toGloss(text) {
 
   /* -- tense is lexical, and only marked once -- */
   if (isPast && !hasTime) {
-    g.unshift({ gloss: 'FINISH', sign: 'FINISH' });
+    g.unshift({ gloss: 'FINISH', sign: 'FINISH', fingerspell: willFingerspell('FINISH') });
     note('tense is lexical', 'past marked with the sign FINISH, not on the verb');
   } else if (isPast && hasTime) {
     note('tense marked once', 'the time sign already sets the tense — no FINISH needed');
@@ -169,6 +230,7 @@ function toGloss(text) {
   if (timeIdx > 0) {
     const [t] = g.splice(timeIdx, 1);
     g.unshift(t);
+    t.moved = true;
     note('time first', t.gloss + ' fronted (TIME - TOPIC - COMMENT)');
   }
 
@@ -177,7 +239,34 @@ function toGloss(text) {
   if (whIdx >= 0 && whIdx !== g.length - 1) {
     const [t] = g.splice(whIdx, 1);
     g.push(t);
+    t.moved = true;
     note('WH goes last', t.gloss + ' moved to the end of the question');
+  }
+
+  /* -- adjectives follow the noun they modify --
+   *
+   * English stacks the adjective in front, ASL usually puts it after: "I have a
+   * big car" is HAVE CAR BIG, not HAVE BIG CAR. Usually, not always — ASL
+   * permits the prenominal order too, and which one a signer reaches for
+   * depends on emphasis and on the adjective. This fires unconditionally
+   * because one consistent order is more readable than a coin toss, but it is a
+   * tendency being applied as a rule, and that is the sort of thing a Deaf
+   * signer would want to look at.
+   *
+   * Anything an earlier rule has already relocated is left alone: a fronted
+   * time sign or a WH word shunted to the end is where it is for a stronger
+   * reason than adjective order. */
+  for (let i = 0; i < g.length - 1; i++) {
+    const a = g[i];
+    const n = g[i + 1];
+    if (!isAdj(a.gloss) || !isNoun(n.gloss)) continue;
+    if (a.moved || n.moved || WH.includes(a.gloss)) continue;
+    g[i] = n;
+    g[i + 1] = a;
+    a.postNominal = true;
+    a.moved = true;
+    n.moved = true;
+    note('adjective after noun', n.gloss + ' ' + a.gloss + ' — ASL puts the adjective second');
   }
 
   /* -- topicalisation: front a known object, giving OSV -- */
@@ -185,23 +274,39 @@ function toGloss(text) {
   if (!isQuestion && !hasNeg && g.length >= 3) {
     const subj = g[0];
     const verb = g[1];
-    const obj = g[g.length - 1];
-    if (PRONOUN[subj.gloss] && isVerb(verb.gloss) && isNoun(obj.gloss) && obj !== verb) {
-      g.splice(g.indexOf(obj), 1);
-      g.unshift(obj);
-      obj.topic = true;
-      note('topic-comment', obj.gloss + ' topicalised → object-subject-verb');
+    /* What moves is the noun phrase, not the noun. Three earlier versions of
+     * this fronted the bare noun and stranded whatever belonged to it at the
+     * end of the clause, modifying nothing: "I like big car" left BIG behind,
+     * "he likes his new job" left POSS-he, "I need five books" left FIVE. So
+     * the span grows left over a possessive or a number and right over an
+     * adjective this run has just put behind its noun. */
+    let last = g.length - 1;
+    let first = g[last].postNominal ? last - 1 : last;
+    while (first > 0 && (g[first - 1].poss || NUMBERS.includes(g[first - 1].gloss))) first--;
+    const obj = g[g[last].postNominal ? last - 1 : last];
+    if (PRONOUN[subj.gloss] && isVerb(verb.gloss) && isNoun(obj.gloss) &&
+        obj !== verb && first > 1) {
+      const moved = g.splice(first, last - first + 1);
+      for (const t of moved) t.topic = true;
+      g.unshift.apply(g, moved);
+      note('topic-comment', moved.map((t) => t.display || t.gloss).join(' ') +
+        ' topicalised → object-subject-verb');
     }
   }
 
-  /* -- pronouns are index points -- */
-  for (const t of g) {
-    if (PRONOUN[t.gloss]) {
-      t.display = PRONOUN[t.gloss];
-      t.sign = t.gloss;
-    }
+  /* -- pronouns are index points -- *
+   * Resolved in the build loop above; this only reports it. Reinstating the
+   * assignment here would undo the possessive reading of HER, since PRONOUN
+   * also holds HER and would overwrite POSS-she with IX-she. */
+  if (g.some((t) => t.display && t.display.indexOf('IX-') === 0)) {
+    note('pronouns are points', 'glossed IX (index) — pointing, not a lexical word');
   }
-  if (g.some((t) => t.display)) note('pronouns are points', 'glossed IX (index) — pointing, not a lexical word');
+  if (g.some((t) => t.poss)) {
+    note('possession is a point too', 'glossed POSS — a flat palm toward the same locus');
+  }
+  if (g.some((t) => t.display && t.display.indexOf('SELF-') === 0)) {
+    note('reflexive', 'glossed SELF — the point made with a thumb-up hand');
+  }
 
   /* -- assign non-manual marker scope -- */
   const type = hasWh ? 'wh' : (isQuestion ? 'yn' : 'statement');
@@ -225,13 +330,11 @@ function toGloss(text) {
   return { english: raw, glosses: g, trace, type };
 }
 
-const YN_STARTERS = ['DO', 'DOES', 'DID', 'ARE', 'IS', 'AM', 'CAN', 'COULD', 'WILL',
-  'WOULD', 'SHOULD', 'HAVE', 'HAS', 'MAY'];
-
 function isYesNo(words) {
   return words.length > 1 && YN_STARTERS.includes(words[0]);
 }
 
-window.SLASL = { toGloss, TIME, WH, NOUNS, VERBS, ADJECTIVES, PRONOUN };
+window.SLASL = { toGloss, TIME, WH, NOUNS, PLACES, VERBS, ADJECTIVES,
+                 PRONOUN, POSSESSIVE, REFLEXIVE, NUMBERS };
 
 })();

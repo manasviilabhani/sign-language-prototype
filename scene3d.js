@@ -8,15 +8,20 @@
  * Stage coordinates (400 x 520, y down) are mapped to world metres here so
  * signs.js can stay in the space it was authored in.
  *
- * The figure is drawn in a chibi style — a head as wide as the body, huge
- * eyes, chubby limbs. That look is a constraint problem, not a free choice:
- * every one of the ~385 signs places its wrist against a stage anchor, and
- * those anchors are calibrated to where this face's features sit. So the head
- * grows *upward and outward* only. The cranium and hair balloon above the
- * hairline and out to the sides, while the brow, eye, nose, mouth and chin
- * stay in the same world band they have always occupied. That is also exactly
- * what chibi proportions are — features clustered low on an oversized skull —
- * so the style and the rig want the same thing.
+ * The figure is a stylised child — a big head, huge eyes, chubby limbs, at
+ * about 3.1 head-heights. The head is the part that is not free, and it drives
+ * everything else: each of the ~385 signs places its wrist against a stage
+ * anchor, and those anchors are calibrated to where this face's features sit,
+ * so the brow, eye, nose, mouth and chin have to stay in the world band they
+ * have always occupied. The skull therefore grows only *upward* — the cranium
+ * and hair balloon above the hairline while the face stays put — which is also
+ * exactly what the style wants: features clustered low on an oversized skull.
+ *
+ * The body is free, and it had been left far too small: at 2.3 head-heights
+ * the torso and legs together were shorter than the arms, the hands hung past
+ * the ankles, and the whole figure read as a face on a doll. The extra height
+ * is all taken below the chest, since the shoulder cannot move either — every
+ * sign's reach is measured from it.
  */
 
 import * as THREE from './vendor/three.module.min.js';
@@ -37,9 +42,17 @@ const deg = (d) => (d * Math.PI) / 180;
 /* ---------------------------------------------------------------- *
  * Body proportions (metres)
  *
- * The figure stands from y=0.866 to about y=1.83 — roughly 2.8 head-heights,
- * which is what puts it in chibi territory. Landmarks that signs depend on are
- * marked; those are not free to move.
+ * The figure stands from y=0.653 to y=1.870 — about 3.1 head-heights. Still
+ * stylised, but no longer a head balanced on a doll: at 2.3 heads the torso and
+ * legs together were shorter than the arms, so the hands hung past the ankles
+ * and the body read as an afterthought under the face.
+ *
+ * Only two things in the whole figure are pinned, and everything else was
+ * sized around them. The head cannot shrink much, because the face landmarks
+ * are calibrated against the sign anchors; and the shoulder cannot drop,
+ * because every sign's reach is measured from it. So the extra height is taken
+ * below the chest — a longer torso and properly long legs — which is exactly
+ * where a 2.3-head figure is missing it.
  * ---------------------------------------------------------------- */
 
 const P = {
@@ -59,8 +72,14 @@ const P = {
    * total reach. */
   upperArm: 0.266,
   foreArm: 0.180,
-  hipY: 1.175,
-  footY: 0.906,
+  /* Lower body. The torso now runs 0.37 m from collar to hip and the legs
+   * 0.42 m from hip to sole, which is roughly the 1:1.1 torso-to-leg ratio a
+   * young child has. Arms are unchanged at 0.446 total, so the fingertips at
+   * rest land at 0.877 — mid-thigh, where a hanging hand belongs, instead of
+   * down at the shoe. */
+  hipY: 1.075,
+  kneeY: 0.870,
+  footY: 0.653,
 };
 
 /* Skull semi-axes and centre. The chin is pinned at 1.470 by the sign anchors,
@@ -70,14 +89,17 @@ const P = {
 /* HEAD_SCALE grows the entire head as one uniform scale on the head group,
  * rather than by re-deriving forty constants. That is the safe way to resize it,
  * because the head is the one part that cannot be resized freely: the face
- * landmarks are pinned to the sign anchors, so growing the skull drags them.
+ * landmarks are pinned to the sign anchors, so scaling the skull drags them.
  *
- * Scaling happens about the skull centre, so features — which all sit below it —
- * drift downward by up to 14 mm at this scale. HEAD_C is nudged up by 10 mm to
- * put the mid-face back, which lands every landmark within about 10 mm of where
- * its anchor expects it; the depth clamp handles the z side. Uniform scale also
- * commutes with the head's rotation, so nod/turn/tilt are unaffected. */
-const HEAD_SCALE = 1.10;
+ * It is 1.0, and that is worth more than it looks. The face landmarks below are
+ * declared as world heights and then stored as offsets from HEAD_C, so at unit
+ * scale every one of them lands *exactly* on the height its sign anchor expects
+ * — the mouth at 1.522, the brow at 1.644 — with no compensation needed. At the
+ * previous 1.10 the whole face was dragged about 15 mm below its anchors, which
+ * is why signs that contact the face were landing high, and HEAD_C carried a
+ * fudge to partly cancel it. The head shrinking by 9% is the other half of
+ * fixing the proportions: the body grew, the head did not. */
+const HEAD_SCALE = 1.00;
 const HEAD_C = 1.675;
 /* Authored skull semi-axes, in head-local space (i.e. before HEAD_SCALE). */
 const SK = { a: 0.178, b: 0.195, c: 0.164 };
@@ -201,6 +223,16 @@ const TAPER = 0.09;
  * the sign authored. See placeArm. Kept low: authored wrist orientation is
  * linguistic information in ASL, so IK only softens the joint, never owns it. */
 const WRIST_FOLLOW = 0.30;
+/* Added to WRIST_FOLLOW in proportion to how far down the hand points, so a
+ * hand that hangs follows its forearm at 0.65 while a hand at signing height
+ * still follows at 0.30.
+ *
+ * The reasoning that caps WRIST_FOLLOW low does not apply to a hand at rest.
+ * It is low because authored wrist orientation is linguistic — but "hanging at
+ * the side" is not a sign and carries no orientation worth protecting, while a
+ * visible kink between forearm and hand there reads as a broken wrist. At 0.30
+ * alone the rest pose measured 7.1 degrees of break; with this it is 3.5. */
+const WRIST_FOLLOW_HANG = 0.35;
 
 /* One phalanx: a gently tapered barrel with a rounded tip and a soft knuckle at
  * its base. The knuckle is the point of it — plain cylinders butted end to end
@@ -358,12 +390,14 @@ export function createScene(canvas) {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   const scene = new THREE.Scene();
-  /* Framing: the figure spans y=0.87 to y=1.83, so the camera looks at its
+  /* Framing: the figure spans y=0.65 to y=1.87, so the camera looks at its
    * middle from far enough back that a 30-degree vertical field covers the
-   * whole of it with a little air top and bottom. */
+   * whole of it with a little air top and bottom. Pulled back from 2.30 and
+   * dropped to the new mid-figure height, because the body it has to cover is
+   * now 1.22 m tall rather than 0.98. */
   const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 20);
-  camera.position.set(0, 1.415, 2.30);
-  camera.lookAt(0, 1.395, 0);
+  camera.position.set(0, 1.310, 2.86);
+  camera.lookAt(0, 1.268, 0);
   // ?cam=head frames the face for checking expressions
   if (typeof location !== 'undefined' && /[?&]cam=head/.test(location.search)) {
     camera.fov = 20;
@@ -460,13 +494,17 @@ export function createScene(canvas) {
   const avatar = new THREE.Group();
   scene.add(avatar);
 
-  /* ---- torso: yellow tee ---- */
-  /* Short and barrel-shaped. A toddler torso is about as wide as it is tall and
-   * has essentially no waist, so this is nearly a straight-sided tub. */
+  /* ---- torso: pink tee ---- */
+  /* A child's torso, not a tub. The old profile ran 1.164 to 1.458 — 0.29 m of
+   * body under a 0.43 m head — and no amount of styling rescues that ratio, so
+   * it now runs from the collar down to the hip at 1.075. Still soft-sided and
+   * waistless, because that part was right: a young child has a barrel chest
+   * and no waist. It is only longer, and a few millimetres wider, so the
+   * shoulder balls sit on a body rather than on the ends of a keg. */
   const teeProfile = [
-    [0.038, 1.164], [0.125, 1.174], [0.146, 1.208], [0.155, 1.252],
-    [0.159, 1.298], [0.160, 1.340], [0.155, 1.382], [0.130, 1.418],
-    [0.076, 1.446], [0.034, 1.458],
+    [0.040, 1.098], [0.140, 1.106], [0.158, 1.144], [0.168, 1.198],
+    [0.173, 1.252], [0.173, 1.306], [0.167, 1.356], [0.152, 1.398],
+    [0.124, 1.432], [0.070, 1.452], [0.034, 1.460],
   ].map((p) => new THREE.Vector2(p[0], p[1]));
   const torso = new THREE.Mesh(new THREE.LatheGeometry(teeProfile, 44), M.tee);
   torso.scale.z = 0.84;
@@ -478,10 +516,22 @@ export function createScene(canvas) {
    * The denim wraps the hips and belly all the way round, which is what
    * dungarees actually do; only the bib climbs the chest, and only at the
    * front. So the wrap is a lathe a few millimetres outside the tee, and the
-   * bib is a separate rounded slab sunk into the chest. */
+   * bib is a separate rounded slab sunk into the chest.
+   *
+   * It now covers the lower torso and closes over the bottom, so the crotch is
+   * denim rather than a hole looking up into the lathe — which a real gap
+   * between the legs made visible.
+   *
+   * It stops at the waist, and where it stops matters. A lathe is
+   * axisymmetric, so its top edge is always a horizontal line straight across
+   * the front; run it up to the chest and that line reads as the hem of an
+   * apron, with the bib stuck on above it as a separate blob. Ending it at the
+   * waist puts the same line where the top of a pair of trousers belongs, and
+   * the bib then rises out of it — with the tee showing either side of the bib,
+   * which is what tells you these are dungarees at all. */
   const denimProfile = [
-    [0.157, 1.148], [0.161, 1.196], [0.165, 1.248],
-    [0.166, 1.296], [0.164, 1.330], [0.159, 1.352],
+    [0.020, 1.058], [0.130, 1.062], [0.170, 1.086], [0.179, 1.140],
+    [0.183, 1.186], [0.184, 1.232], [0.182, 1.276], [0.176, 1.306],
   ].map((p) => new THREE.Vector2(p[0], p[1]));
   const dungarees = new THREE.Mesh(new THREE.LatheGeometry(denimProfile, 44), M.denim);
   dungarees.scale.z = 0.86;
@@ -489,46 +539,44 @@ export function createScene(canvas) {
   dungarees.receiveShadow = true;
   avatar.add(dungarees);
 
-  const bib = new THREE.Mesh(new THREE.SphereGeometry(0.081, 28, 20), M.denim);
-  bib.scale.set(0.95, 0.76, 0.30);
-  bib.position.set(0, 1.360, 0.116);
+  /* The bib, sunk into the chest and overlapping the waist by a good centimetre
+   * so the two are one garment rather than two shapes that meet. */
+  const bib = new THREE.Mesh(new THREE.SphereGeometry(0.100, 28, 20), M.denim);
+  bib.scale.set(0.86, 0.80, 0.34);
+  bib.position.set(0, 1.348, 0.118);
   bib.castShadow = true;
   avatar.add(bib);
 
-  const pocket = new THREE.Mesh(new THREE.SphereGeometry(0.043, 24, 18), M.denimDark);
+  const pocket = new THREE.Mesh(new THREE.SphereGeometry(0.048, 24, 18), M.denimDark);
   pocket.scale.set(1.05, 0.80, 0.16);
-  pocket.position.set(0, 1.338, 0.137);
+  pocket.position.set(0, 1.348, 0.152);
   avatar.add(pocket);
-  const stitch = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.004, 0.004), M.denim);
-  stitch.position.set(0, 1.358, 0.149);
+  const stitch = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.004, 0.004), M.denim);
+  stitch.position.set(0, 1.372, 0.160);
   avatar.add(stitch);
 
   for (const sd of [-1, 1]) {
-    /* Strap over the shoulder and down the back. A curve through five points
+    /* Strap over the shoulder and down the back. A curve through several points
      * keeps it lying on the body instead of cutting the corner at the
-     * shoulder, which a straight tube between bib and back would do. */
-    /* Points taken off the measured torso and shoulder-ball surfaces.
+     * shoulder, which a straight tube between bib and back would do.
      *
      * Deliberately near-vertical rather than splayed outward. The camera sits at
-     * shoulder height, so the part of the strap that actually crosses the top of
+     * chest height, so the part of the strap that actually crosses the top of
      * the shoulder is edge-on and invisible; a path that swung wide left only an
      * outward-curving stub ending in mid-air, which read as a horn. Rising close
      * to the chest instead means the visible portion is unmistakably a strap, and
      * it disappears where the sleeve occludes it — which is what going over a
-     * shoulder looks like from the front.
-     *
-     * Previously taken off the narrow torso. They were set
-     * against the old narrower lathe and, once the body broadened, the straps
-     * ran inside the shoulder and read as floating in front of it. */
+     * shoulder looks like from the front. The z values are ~10 mm further out
+     * than they were, tracking the slightly wider chest. */
     const path = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(sd * 0.056, 1.382, 0.128),
-      new THREE.Vector3(sd * 0.062, 1.400, 0.110),
-      new THREE.Vector3(sd * 0.070, 1.418, 0.086),
-      new THREE.Vector3(sd * 0.078, 1.438, 0.048),
-      new THREE.Vector3(sd * 0.088, 1.456, 0.018),
-      new THREE.Vector3(sd * 0.092, 1.459, -0.020),
-      new THREE.Vector3(sd * 0.086, 1.430, -0.062),
-      new THREE.Vector3(sd * 0.076, 1.398, -0.090),
+      new THREE.Vector3(sd * 0.058, 1.388, 0.138),
+      new THREE.Vector3(sd * 0.064, 1.404, 0.120),
+      new THREE.Vector3(sd * 0.072, 1.420, 0.094),
+      new THREE.Vector3(sd * 0.080, 1.440, 0.054),
+      new THREE.Vector3(sd * 0.090, 1.458, 0.020),
+      new THREE.Vector3(sd * 0.094, 1.461, -0.020),
+      new THREE.Vector3(sd * 0.088, 1.432, -0.064),
+      new THREE.Vector3(sd * 0.078, 1.400, -0.092),
     ]);
     const strap = new THREE.Mesh(new THREE.TubeGeometry(path, 34, 0.0142, 12, false), M.denim);
     strap.castShadow = true;
@@ -538,42 +586,46 @@ export function createScene(canvas) {
      * than a disc — a flat cylinder end catches no highlight and disappears. */
     const button = new THREE.Mesh(new THREE.SphereGeometry(0.0151, 20, 16), M.brass);
     button.scale.set(1, 1, 0.55);
-    button.position.set(sd * 0.056, 1.394, 0.140);
+    button.position.set(sd * 0.058, 1.404, 0.148);
     avatar.add(button);
 
-    /* ---- stubby legs, turned-up cuffs, chunky shoes ----
+    /* ---- legs, turned-up cuffs, chunky shoes ----
      * Set wide enough apart to leave daylight between them; closer together and
-     * the denim merges with the hips into one solid blue block. */
-    /* Legs kept short — with the head at ~40% of total height the whole figure
-     * below the chest has to be compact, or the ratio slips back. */
-    const hipX = sd * 0.076;
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.070, 0.064, 0.150, 22), M.denim);
-    leg.position.set(hipX, 1.108, 0.004);
+     * the denim merges with the hips into one solid blue block.
+     *
+     * These are the change that fixes the silhouette. They used to be 0.15 m
+     * stumps mostly hidden under the hips — the figure had no legs, just shoes
+     * below a shirt — and they now run the full 0.27 m from hip to ankle, which
+     * is what a child's leg is next to their torso. Chubby and barely tapered,
+     * so the length reads as a toddler's leg rather than a stilt. */
+    const hipX = sd * 0.082;
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.076, 0.066, 0.272, 22), M.denim);
+    leg.position.set(hipX, 0.940, 0.004);
     leg.castShadow = true;
     avatar.add(leg);
 
-    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.077, 0.077, 0.048, 24), M.denimDark);
-    cuff.position.set(hipX, 1.030, 0.004);
+    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.080, 0.080, 0.050, 24), M.denimDark);
+    cuff.position.set(hipX, 0.800, 0.004);
     cuff.castShadow = true;
     avatar.add(cuff);
 
     /* Ankle, then shoe. The shoe used to start below where the cuff ended and
      * read as floating; this overlaps both, so the leg runs continuously into
      * the foot. Ankle first so the shoe's rounded top has something to meet. */
-    const ankle = new THREE.Mesh(new THREE.CylinderGeometry(0.063, 0.056, 0.048, 22), M.skin);
-    ankle.position.set(hipX, 0.998, 0.008);
+    const ankle = new THREE.Mesh(new THREE.CylinderGeometry(0.064, 0.057, 0.052, 22), M.skin);
+    ankle.position.set(hipX, 0.756, 0.008);
     ankle.castShadow = true;
     avatar.add(ankle);
 
-    const shoe = new THREE.Mesh(new THREE.SphereGeometry(0.078, 28, 22), M.shoe);
+    const shoe = new THREE.Mesh(new THREE.SphereGeometry(0.080, 28, 22), M.shoe);
     shoe.scale.set(0.94, 0.74, 1.40);
-    shoe.position.set(hipX, 0.972, 0.030);
+    shoe.position.set(hipX, 0.712, 0.030);
     shoe.castShadow = true;
     avatar.add(shoe);
 
-    const sole = new THREE.Mesh(new THREE.CylinderGeometry(0.069, 0.069, 0.022, 24), M.sole);
+    const sole = new THREE.Mesh(new THREE.CylinderGeometry(0.071, 0.071, 0.022, 24), M.sole);
     sole.scale.set(1, 1, 1.40);
-    sole.position.set(hipX, 0.930, 0.030);
+    sole.position.set(hipX, 0.666, 0.030);
     avatar.add(sole);
   }
 
@@ -614,153 +666,164 @@ export function createScene(canvas) {
 
   /* ---- hair ----
    *
-   * One mass, and the two rules that make it read as one.
+   * Four masses, and one rule that shapes all of them: hair is a continuous
+   * surface, so every piece has to overlap its neighbour by enough that the
+   * intersection is never legible as an edge.
    *
-   * First: every piece is the same material. The back of the head used to be
-   * `hairDark`, and a colour change along an intersection curve is exactly what
-   * the eye reads as a seam between two separate shells — the "lumps on the
-   * sides". Same colour, and an intersection becomes invisible.
+   * The previous version broke that rule twice. The falls were chains of six
+   * lobes spaced nearly their own radius apart, and lobes overlapping that
+   * little each keep their own silhouette — the hair read as a row of pom-poms
+   * hung off the ears. And the crown cap was truncated at a latitude with
+   * nothing covering the cut, so the join showed as a hard straight edge
+   * slicing across the outline at each temple.
    *
-   * Second: detail pieces live only at the front. Lobes out at the temples had
-   * nothing to merge into sideways, so each one ended as its own blob on the
-   * silhouette. The sides and back are now carried entirely by the two big
-   * volumes below, and the fringe only breaks the outline where hair actually
-   * parts — at the face.
+   * Everything here is one material. A colour change along an intersection
+   * curve is exactly what the eye reads as a seam between two separate shells.
    */
+  const HAIR_A = SK.a * 1.075, HAIR_B = SK.b * 1.090, HAIR_C = SK.c * 1.075;
+
+  /* The crown, a few millimetres proud of the skull all round. It stops well
+   * above the brow and the fringe covers its rim, because a sphere cut at a
+   * latitude ends in a circle and a circle drawn across a forehead is not a
+   * hairline. */
   const hairCap = new THREE.Mesh(
-    new THREE.SphereGeometry(1, 56, 36, 0, Math.PI * 2, 0, Math.PI * 0.40), M.hair);
-  hairCap.scale.set(SK.a * 1.08, SK.b * 1.10, SK.c * 1.09);
-  hairCap.position.set(0, 0.006, -0.004);
+    new THREE.SphereGeometry(1, 64, 44, 0, Math.PI * 2, 0, Math.PI * 0.46), M.hair);
+  hairCap.scale.set(HAIR_A, HAIR_B, HAIR_C);
+  hairCap.position.set(0, 0.005, -0.008);
   hairCap.castShadow = true;
+  hairCap.receiveShadow = true;
   head.add(hairCap);
 
-  /* Carries the sides and the back, and covers the cap's lower rim — which is a
-   * hard circle at constant latitude and would otherwise draw a line right
-   * round the head. Sized to stop above the jaw so this stays short hair rather
-   * than a bob, and kept just inside the ears so they still show. */
-  const hairBack = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), M.hair);
-  hairBack.scale.set(SK.a * 1.02, SK.b * 0.84, SK.c * 0.95);
-  hairBack.position.set(0, 0.008, -0.030);
+  /* Sides and back down to the jaw: the mass that frames the face, and what
+   * covers the cap's rim. Wider than the skull, so it shows beside the cheeks
+   * — and pushed back far enough that its *front* surface sits inside the face
+   * and is hidden by it. That is how a full ellipsoid stays off the forehead
+   * without anything being cut out of it. */
+  const hairBack = new THREE.Mesh(new THREE.SphereGeometry(1, 56, 40), M.hair);
+  hairBack.scale.set(SK.a * 1.055, SK.b * 0.98, SK.c * 0.98);
+  hairBack.position.set(0, -0.008, -0.034);
   hairBack.castShadow = true;
+  hairBack.receiveShadow = true;
   head.add(hairBack);
 
-  /* Length, as chains of shrinking rounded lobes rather than three big ones.
+  /* Length.
    *
-   * The previous version was one slab per side plus one down the back, and that
-   * is what read as a flat helmet with hard straight edges: a single scaled
-   * sphere is an ellipsoid, so its silhouette is a smooth arc that ends abruptly
-   * wherever the shape stops. Hair does not end abruptly.
+   * A fall is one swept surface, not a string of lobes. Two earlier versions
+   * were chains of spheres and both failed for the same reason, only at
+   * different scales: six big lobes read as pom-poms hung off the ears, and
+   * thirty small ones read as corduroy. The spacing was never the real problem
+   * — separate meshes have separate normals, so *every* intersection curve
+   * between two of them is a crease in the shading however deeply they overlap.
    *
-   * A chain fixes both complaints at once. Each lobe is slightly smaller and
-   * slightly further down than the one above, so the mass narrows as it falls
-   * and the last small lobe *is* the taper — no hard cut where hair meets the
-   * shoulder. Overlapping lobes of differing size also give the surface bumps,
-   * which is the lock definition that one smooth ellipsoid cannot have.
+   * So the fall is built as a single mesh instead: horizontal elliptical rings
+   * stepped down a curve, stitched into a tube and given smoothed vertex
+   * normals. One surface, one set of normals, no creases — and the ring radius
+   * is free to vary down the curve, which is what lets the mass hold its
+   * thickness past the jaw and then taper to a point, the way a lock of hair
+   * actually ends.
    *
-   * All of it is parented to `head`, so the hair swings with a head turn, and
-   * all of it stays behind the plane of the chest (negative z) so the arms pass
-   * in front rather than slicing through — there is no cloth simulation here. */
-  // x, y, z, radius, sx, sy, sz
-  const BACK_FALL = [
-    [0.000, -0.045, -0.068, 0.150, 1.04, 0.60, 0.42],
-    [0.004, -0.140, -0.078, 0.138, 1.00, 0.60, 0.40],
-    [-0.006, -0.228, -0.076, 0.116, 0.94, 0.58, 0.38],
-    [0.008, -0.302, -0.070, 0.088, 0.84, 0.56, 0.36],
-    [0.000, -0.358, -0.064, 0.060, 0.74, 0.52, 0.34],
-    [0.004, -0.394, -0.058, 0.036, 0.64, 0.48, 0.32],
-  ];
-  /* Half a chain; mirrored for the other side.
-   *
-   * Set wider and longer than the fall alone needs, because the widened torso
-   * and the shoulder balls sit in front of this hair and were swallowing it: at
-   * x=0.148 the chain ran inside the torso's silhouette and the "long" hair
-   * vanished into a bob. It now hangs just outside the body's widest point and
-   * carries on well below the shoulder, which is the part that actually reads.
-   * Still all behind the chest plane, so the arms pass in front. */
-  // x, y, z, radius, sx, sy, sz
-  const SIDE_FALL = [
-    [0.170, -0.070, -0.014, 0.066, 0.90, 1.00, 0.86],
-    [0.176, -0.150, -0.014, 0.060, 0.88, 1.00, 0.86],
-    [0.176, -0.228, -0.014, 0.052, 0.86, 1.00, 0.84],
-    [0.172, -0.300, -0.014, 0.044, 0.82, 0.98, 0.82],
-    [0.166, -0.362, -0.014, 0.034, 0.78, 0.94, 0.78],
-    [0.158, -0.412, -0.014, 0.024, 0.72, 0.88, 0.72],
-    [0.150, -0.446, -0.014, 0.016, 0.66, 0.82, 0.66],
-  ];
-  const fall = (l, mirror) => {
-    const m = new THREE.Mesh(new THREE.SphereGeometry(l[3], 32, 24), M.hair);
-    m.scale.set(l[4], l[5], l[6]);
-    m.position.set(l[0] * (mirror ? -1 : 1), l[1], l[2]);
-    m.castShadow = true;
-    m.receiveShadow = true;
-    head.add(m);
+   * All of it stays behind the plane of the chest, so the arms pass in front
+   * rather than slicing through: there is no cloth simulation here. */
+  const hairFall = (pts, r0, r1, sx, sz, mirror) => {
+    const m = mirror ? -1 : 1;
+    const curve = new THREE.CatmullRomCurve3(
+      pts.map((p) => new THREE.Vector3(p[0] * m, p[1], p[2])));
+    const N = 40;                                   // rings down the curve
+    const R = 24;                                   // vertices round each ring
+    const pos = [];
+    const idx = [];
+    const p = new THREE.Vector3();
+    let lastR = r0;
+    for (let i = 0; i <= N; i++) {
+      const t = i / N;
+      // Full thickness for the first quarter, then a long taper to the tip.
+      const k = Math.pow(Math.max(0, (t - 0.25) / 0.75), 1.6);
+      const r = r0 + (r1 - r0) * k;
+      lastR = r;
+      curve.getPoint(t, p);
+      for (let j = 0; j <= R; j++) {
+        const a = (j / R) * Math.PI * 2;
+        pos.push(p.x + Math.cos(a) * r * sx, p.y, p.z + Math.sin(a) * r * sz);
+      }
+    }
+    for (let i = 0; i < N; i++) {
+      for (let j = 0; j < R; j++) {
+        const a = i * (R + 1) + j, b = a + 1;
+        const c = a + (R + 1), d = c + 1;
+        idx.push(a, b, c, b, d, c);
+      }
+    }
+    // Rounded tip, and a cap on the top ring — which is buried inside the
+    // head's own hair, but an open tube shows its inside from below.
+    curve.getPoint(1, p);
+    const tip = pos.length / 3;
+    pos.push(p.x, p.y - lastR, p.z);
+    for (let j = 0; j < R; j++) {
+      const a = N * (R + 1) + j;
+      idx.push(a, a + 1, tip);
+    }
+    curve.getPoint(0, p);
+    const top = pos.length / 3;
+    pos.push(p.x, p.y, p.z);
+    for (let j = 0; j < R; j++) idx.push(j + 1, j, top);
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, M.hair);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    head.add(mesh);
   };
-  for (const l of BACK_FALL) fall(l, false);
-  for (const l of SIDE_FALL) { fall(l, false); fall(l, true); }
 
-  /* Lock definition over the crown. Placed on the cap's own surface via onShell
-   * and sunk most of the way into it, so each one shows as a soft raised ridge
-   * a few millimetres proud rather than as a blob sitting on top of the head. */
-  const CAP_A = SK.a * 1.08, CAP_B = SK.b * 1.10, CAP_C = SK.c * 1.09;
-  // x, y, sx, sy, roll
-  const CAP_LOCKS = [
-    [0.072, 0.104, 1.30, 0.34, -36],
-    [0.016, 0.138, 1.25, 0.32, -14],
-    [-0.058, 0.122, 1.20, 0.32, 20],
-    [0.120, 0.050, 1.05, 0.38, -58],
-    [-0.124, 0.056, 1.05, 0.38, 54],
-    [0.044, 0.060, 1.10, 0.30, -48],
+  // Down the back, under the hair above; broad and flat against the shoulders.
+  hairFall([
+    [0.000, -0.010, -0.100],
+    [0.000, -0.130, -0.108],
+    [0.004, -0.250, -0.100],
+    [0.000, -0.350, -0.088],
+    [0.000, -0.432, -0.074],
+  ], 0.150, 0.048, 1.02, 0.44, false);
+
+  /* Down each side, in front of the shoulder at the top and behind it lower
+   * down — which is both what hair does and what keeps it clear of the
+   * shoulder ball the sleeve is built on. */
+  const SIDE = [
+    [0.142, 0.030, -0.026],
+    [0.166, -0.090, -0.044],
+    [0.172, -0.200, -0.066],
+    [0.166, -0.310, -0.086],
+    [0.150, -0.400, -0.098],
+    [0.128, -0.462, -0.100],
   ];
-  for (const l of CAP_LOCKS) {
-    const g = onShell(CAP_A, CAP_B, CAP_C, l[0], l[1], 0.017);
-    head.add(g);
-    const m = new THREE.Mesh(new THREE.SphereGeometry(0.052, 26, 20), M.hair);
-    m.scale.set(l[2], l[3], 0.42);
-    m.rotation.z = deg(l[4]);
-    m.castShadow = true;
-    g.add(m);
-  }
+  hairFall(SIDE, 0.068, 0.014, 0.94, 0.96, false);
+  hairFall(SIDE, 0.068, 0.014, 0.94, 0.96, true);
 
-  // Front only, large and heavily overlapping. x, y, z, sx, sy, sz, roll
-  const FRINGE = [
-    [0.058, 0.076, 0.100, 1.45, 0.62, 0.70, -28],
-    [0.010, 0.090, 0.108, 1.40, 0.58, 0.72, -16],
-    [-0.040, 0.086, 0.104, 1.35, 0.56, 0.70, -2],
-    [-0.086, 0.070, 0.086, 1.15, 0.58, 0.64, 18],
-  ];
-  for (const l of FRINGE) {
-    const lock = new THREE.Mesh(new THREE.SphereGeometry(0.060, 28, 22), M.hair);
-    lock.scale.set(l[3], l[4], l[5]);
-    lock.position.set(l[0], l[1], l[2]);
-    lock.rotation.z = deg(l[6]);
-    lock.castShadow = true;
-    head.add(lock);
-  }
-
-  /* Flyaway wisps, at the fringe only.
+  /* Fringe. Broad lobes laid on the cap's own surface along an arc, overlapping
+   * heavily: few and wide, so the curves where they meet read as the division
+   * between locks, which is what a fringe has. Thirteen narrow ones instead
+   * gave the same shading creases as the old falls and the forehead came out
+   * corrugated.
    *
-   * Two earlier versions failed as a group rather than individually: five fat
-   * cones read as rhino horns, and nine thin ones evenly spaced round the crown
-   * read as a mohawk. A strand only looks stray if its neighbours are not doing
-   * the same thing, so these are few, thin, and swept forward over the fringe
-   * rather than standing up off the crown.
-   */
-  /* Sat at y=0.15 and z=0.08 before, which is mid-cap: the cap surface is
-   * further out than that there, so all three were entirely inside the hair and
-   * contributed nothing. They belong down at the hairline, pitched forward so
-   * the tips clear the fringe. */
-  // x, y, z, radius, length, roll, pitch
-  const STRANDS = [
-    [0.048, 0.106, 0.136, 0.0080, 0.052, -50, 52],
-    [0.006, 0.118, 0.140, 0.0085, 0.058, -28, 56],
-    [-0.048, 0.110, 0.130, 0.0075, 0.050, 26, 50],
-  ];
-  for (const t of STRANDS) {
-    const strand = new THREE.Mesh(new THREE.ConeGeometry(t[3], t[4], 10), M.hair);
-    strand.position.set(t[0], t[1], t[2]);
-    strand.rotation.set(deg(t[6]), 0, deg(t[5]));
-    strand.castShadow = true;
-    head.add(strand);
+   * The arc is centred off to one side and each lobe leans a little further
+   * than the one before, so it sweeps across the forehead rather than sitting
+   * on it as a bowl. It has to clear the brows: they are at y = -0.031 and they
+   * carry most of the expression, so the hairline is kept a good centimetre
+   * above them even at the temples, where the arc dips lowest. */
+  const FRINGE_N = 6;
+  for (let i = 0; i < FRINGE_N; i++) {
+    const t = i / (FRINGE_N - 1);
+    const x = -0.140 + t * 0.280;
+    const u = (x - 0.030) / 0.150;           // distance from the part
+    const y = 0.098 - Math.min(1.2, u * u) * 0.020;
+    const g = onShell(HAIR_A, HAIR_B, HAIR_C, x, y, 0.024);
+    head.add(g);
+    const lobe = new THREE.Mesh(new THREE.SphereGeometry(0.062, 28, 20), M.hair);
+    lobe.scale.set(1.15, 1.20, 0.60);
+    lobe.rotation.z = deg(-22 + t * 42);
+    lobe.castShadow = true;
+    g.add(lobe);
   }
 
   const nose = new THREE.Mesh(new THREE.SphereGeometry(0.0145, 18, 14), M.skin);
@@ -983,6 +1046,11 @@ export function createScene(canvas) {
      * would be inside the head. See skullPush. */
     _qAuth.setFromEuler(_eAuth.set(0, deg(arm.side * 14), deg(-wrist.rot * arm.hand.side)));
     _yAxis.set(0, 1, 0).applyQuaternion(_qAuth);
+    /* How far down the hand points, 0 (level or raised) to 1 (straight down).
+     * Both the wrist lean and the pronation roll below are scaled by it, so
+     * every adjustment here applies to a hand that hangs and fades out
+     * completely by the time the hand is at signing height. */
+    const hang = clamp(-_yAxis.y, 0, 1);
     target.z += Math.max(
       skullPush(target.x, target.y, target.z, FACE_PAD),
       skullPush(
@@ -1020,7 +1088,7 @@ export function createScene(canvas) {
      * above, since the depth clamp needs the finger direction.) */
     _fore.copy(target).sub(elbow).normalize();
     _qAlign.setFromUnitVectors(_yAxis, _fore);
-    _qLean.identity().slerp(_qAlign, WRIST_FOLLOW);
+    _qLean.identity().slerp(_qAlign, WRIST_FOLLOW + hang * WRIST_FOLLOW_HANG);
 
     /* Palm facing — which this renderer used to throw away entirely.
      *
@@ -1037,22 +1105,26 @@ export function createScene(canvas) {
      * special case here and the shared PALM_REST value stays untouched — it is
      * chosen for the flat renderer's chirality trick and must not move. */
     const facing = wrist.palm !== undefined && wrist.palm < 0 ? -1 : 1;
-    const hang = clamp(-_yAxis.y, 0, 1);
-    /* 80 degrees, which is a deliberate compromise and worth naming.
+    /* The sign of this was wrong, and it is what put the hands on backwards.
      *
-     * Fingers curl toward the palm. So the squarer the back of the hand faces
-     * the camera, the more completely the curled fingers hide behind it — at
-     * 105 degrees the resting hand was a smooth stump. Wanting both the back of
-     * the hand *and* clearly separated fingers on a hand that hangs and curls is
-     * asking for two things that trade off against each other.
+     * Pronation rolls the palm *toward the thigh*; this rolled it the other way,
+     * so a hand hanging at the side presented its palm to the room with the
+     * thumb pointing backwards — an arm attached the wrong way round, which is
+     * exactly what it looked like. Measured at the rest pose, the palm normal
+     * came out at (-0.94, -0.34, -0.03) for the right hand: pointing away from
+     * the body. Negated, it is (+0.92, +0.34, +0.18), which is the palm against
+     * the thigh and the thumb forward — how an arm hangs.
      *
-     * Just short of edge-on resolves it the way a real hanging hand reads: the
-     * outer edge and back of the hand face the viewer, and the fingers curl
-     * across the view where their separation is visible, rather than straight
-     * away from it. Raise this toward 180 for more back-of-hand and less finger.
-     */
+     * 92 degrees rather than 80 because with the roll going the right way there
+     * is no longer anything to trade off: at 80 the palm still faced half
+     * forward. This leaves the palm 14 degrees off square to the thigh, which
+     * presents the back and outer edge of the hand to the viewer while the
+     * fingers curl across the view, where the gaps between them stay legible.
+     * Square to the thigh (100) is anatomically truer and reads as a stump. Only hands that hang are affected — `hang` is
+     * zero for anything at signing height, so authored palm orientation, which
+     * is linguistic, is untouched. */
     _qTwist.setFromAxisAngle(
-      _up, (facing < 0 ? Math.PI : 0) + hang * deg(80) * arm.hand.side);
+      _up, (facing < 0 ? Math.PI : 0) - hang * deg(92) * arm.hand.side);
     arm.hand.root.quaternion.copy(_qLean).multiply(_qAuth).multiply(_qTwist);
   }
 
