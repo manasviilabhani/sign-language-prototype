@@ -61,8 +61,14 @@ const SIGN_FOR = {
 };
 const WH = ['WHAT', 'WHERE', 'WHO', 'WHY', 'WHEN', 'HOW', 'WHICH', 'WHOSE'];
 
-/* Determiners and indefinites — (filled in next step) */
-const DETERMINERS = [];
+/* Determiners and indefinites. NOBODY is listed here rather than with the
+ * negatives, which is a simplification: it negates a clause the way NOT does
+ * and ought to trigger the head shake, but the negation rule keys off NEGATIVE
+ * and folding it in there would make it the clause's NOT. Left as a known gap
+ * rather than half-wired. */
+const DETERMINERS = ['THIS', 'THAT', 'THESE', 'THOSE', 'ANY', 'EACH', 'EVERY',
+  'BOTH', 'ANOTHER', 'OTHER', 'SOMETHING', 'SOMEONE', 'ANYONE', 'EVERYONE',
+  'NOBODY', 'EVERYTHING'];
 
 /* ---------------------------------------------------------------- *
  * Time
@@ -70,9 +76,18 @@ const DETERMINERS = [];
 
 const TIME = ['NOW', 'TODAY', 'TOMORROW', 'YESTERDAY', 'TONIGHT', 'MORNING', 'NIGHT', 'LATER'];
 
-/* Days and months — (filled in next step) */
-const DAYS = [];
-const MONTHS = [];
+/* Days and months are time signs, so asl.js fronts them the way it fronts
+ * TOMORROW and sets the tense from them — "Monday I went to school" needs no
+ * FINISH, because MONDAY has already said when.
+ *
+ * MAY is deliberately in both this list and YN_STARTERS. The modal and the
+ * month are the same string, and the two never collide in practice: YN_STARTERS
+ * is only consulted at the start of a sentence ("May I help you"), where a bare
+ * month is not a sentence. */
+const DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY',
+  'SATURDAY', 'SUNDAY'];
+const MONTHS = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY',
+  'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
 
 /* ---------------------------------------------------------------- *
  * Numbers
@@ -87,8 +102,12 @@ const NUMBERS = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT',
   'NINE', 'TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN',
   'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN', 'TWENTY'];
 
-/* Quantifiers — (filled in next step) */
-const QUANTIFIERS = [];
+/* Quantifiers. MORE moved here out of ADJECTIVES, which changes one thing:
+ * isAdj('MORE') is now false, so the adjective-after-noun rule no longer
+ * reorders "more water" and it stays MORE WATER. That is the right outcome —
+ * a quantifier precedes its noun where a descriptive adjective follows it. */
+const QUANTIFIERS = ['MANY', 'MUCH', 'FEW', 'LITTLE', 'ALL', 'SOME', 'ENOUGH',
+  'LESS', 'MORE'];
 
 /* ---------------------------------------------------------------- *
  * Verbs
@@ -101,7 +120,32 @@ const QUANTIFIERS = [];
 const VERBS = ['EAT', 'DRINK', 'GO', 'COME', 'HELP', 'LOVE', 'WANT', 'KNOW', 'UNDERSTAND',
   'LEARN', 'SEE', 'SLEEP', 'STOP', 'THANK', 'SIGN', 'WORK', 'PLEASE',
   'HAVE', 'LIKE', 'NEED', 'PLAY', 'READ', 'WRITE', 'WATCH', 'LIVE', 'STAY', 'TRY',
-  'ASK', 'THINK', 'REMEMBER', 'FORGET', 'BUY', 'PAY', 'CAN', 'MUST', 'SHOULD'];
+  'ASK', 'THINK', 'REMEMBER', 'FORGET', 'BUY', 'PAY', 'CAN', 'MUST', 'SHOULD',
+  'START', 'BEGIN', 'CONTINUE', 'LISTEN', 'HEAR', 'SPEAK', 'TALK', 'MOVE',
+  'WALK', 'RUN', 'DRIVE', 'FLY', 'TRAVEL', 'OPEN', 'CLOSE', 'PUT', 'GET',
+  'CALL', 'VISIT', 'COOK', 'CLEAN', 'WASH', 'BELIEVE', 'HOPE', 'WISH', 'SHOW',
+  'EXPLAIN', 'DESCRIBE', 'LOSE', 'WIN', 'GROW', 'CHANGE', 'BUILD', 'FIX', 'BREAK',
+  /* These nine were reachable only through IRREGULAR_PAST: GAVE mapped to GIVE,
+   * MET to MEET, and so on, but the base form was not a verb to isVerb — so
+   * "she gave him her book" topicalised and "she gives him her book" did not.
+   * All nine already have signs; they were simply never listed. */
+  'MAKE', 'GIVE', 'TAKE', 'TELL', 'SAY', 'FEEL', 'LEAVE', 'MEET', 'TEACH',
+  /* HAVE-TO and NEED-TO are listed but unreachable, and deliberately so: a
+   * two-word gloss only ever gets built if PHRASES collapses it, and a
+   * collapsed phrase with no sign of its own resolves to one of its parts or
+   * spells as one run-on word. Both halves — the PHRASES entry and the sign —
+   * have to land together. Until then these sit here doing nothing rather than
+   * making "I have to go" worse than it is now.
+   *
+   * FINISH is missing from this list on purpose. It is the past-tense marker
+   * (see the tense rule in asl.js), and adding it as a content verb would make
+   * "I finish work" produce a FINISH token indistinguishable from the one the
+   * tense rule unshifts. Telling those two apart is a disambiguation rule, not
+   * a vocabulary entry, and rushing it risks the past-tense logic that
+   * currently works. Known follow-up. CLEAN has the same shape of problem in
+   * miniature — it is in this list and in ADJECTIVES, and nothing decides
+   * which sense is meant in "clean room". */
+  'HAVE-TO', 'NEED-TO'];
 
 // ASL verbs do not inflect, so English irregular pasts map back to the base
 // sign and the tense is carried separately.
@@ -132,35 +176,52 @@ const PLACES = ['AMERICA', 'USA', 'UNITED-STATES', 'CANADA', 'ENGLAND', 'BRITAIN
 const NOUNS = ['WATER', 'FOOD', 'NAME', 'HOME', 'SCHOOL', 'FRIEND', 'FAMILY', 'PEOPLE',
   'LANGUAGE', 'SIGN-LANGUAGE', 'SIGN', 'WORK', 'COFFEE',
   'BOOK', 'CAR', 'DOOR', 'ROOM', 'MONEY', 'TIME', 'DAY', 'WEEK', 'YEAR', 'JOB',
-  'TEACHER', 'STUDENT', 'DOCTOR', 'MOTHER', 'FATHER', 'SISTER', 'BROTHER'].concat(PLACES);
+  'TEACHER', 'STUDENT', 'DOCTOR', 'MOTHER', 'FATHER', 'SISTER', 'BROTHER',
+  'MAN', 'WOMAN', 'BOY', 'GIRL', 'BABY', 'CHILD', 'ADULT', 'KID',
+  'HOUSE', 'STORE', 'HOSPITAL', 'RESTAURANT', 'PARK', 'OFFICE', 'CHURCH', 'LIBRARY',
+  'PHONE', 'COMPUTER', 'TABLE', 'CHAIR', 'BED', 'WINDOW', 'PAPER', 'PEN', 'BAG',
+  'BREAD', 'MEAT', 'FRUIT', 'VEGETABLE', 'MILK', 'EGG',
+  'IDEA', 'PROBLEM', 'QUESTION', 'ANSWER', 'REASON', 'PLAN', 'RULE', 'LAW',
+  'HOUR', 'MINUTE', 'SECOND', 'MONTH',
+  'SUMMER', 'WINTER', 'SPRING', 'FALL', 'WEEKEND'].concat(PLACES);
 
 /* ---------------------------------------------------------------- *
  * Adjectives
  * ---------------------------------------------------------------- */
 
-const ADJECTIVES = ['GOOD', 'BAD', 'HAPPY', 'SAD', 'ANGRY', 'TIRED', 'HUNGRY', 'DEAF', 'OK', 'MORE',
-  'BIG', 'SMALL', 'NEW', 'OLD', 'FAST', 'SLOW', 'EASY', 'HARD', 'HOT', 'COLD'];
+const ADJECTIVES = ['GOOD', 'BAD', 'HAPPY', 'SAD', 'ANGRY', 'TIRED', 'HUNGRY', 'DEAF', 'OK',
+  'BIG', 'SMALL', 'NEW', 'OLD', 'FAST', 'SLOW', 'EASY', 'HARD', 'HOT', 'COLD',
+  'LONG', 'SHORT', 'HIGH', 'LOW', 'WIDE', 'NARROW', 'CLEAN', 'DIRTY',
+  'STRONG', 'WEAK', 'RICH', 'POOR', 'SAME', 'DIFFERENT', 'IMPORTANT',
+  'DIFFICULT', 'SIMPLE', 'FULL', 'EMPTY', 'RIGHT', 'WRONG', 'TRUE', 'FALSE'];
 
 /* ---------------------------------------------------------------- *
  * Colors
  * ---------------------------------------------------------------- */
 
-/* (filled in next step) */
-const COLORS = [];
+/* Colours behave as adjectives — isAdj in asl.js checks this list too, so
+ * "red car" reorders to CAR RED like any other description. */
+const COLORS = ['RED', 'BLUE', 'GREEN', 'YELLOW', 'BLACK', 'WHITE', 'BROWN',
+  'ORANGE', 'PURPLE', 'PINK', 'GRAY'];
 
 /* ---------------------------------------------------------------- *
  * Conjunctions
  * ---------------------------------------------------------------- */
 
-/* (filled in next step) */
-const CONJUNCTIONS = [];
+/* Vocabulary only. ASL does not join clauses the way English does — it leans
+ * on pausing, body shift and raised brows where English reaches for a
+ * conjunction, and BECAUSE and BUT often front their clause rather than sitting
+ * between the two. None of that is implemented: these are here so the words are
+ * recognised rather than treated as unknown. The reordering is a future rule. */
+const CONJUNCTIONS = ['BECAUSE', 'SO', 'BUT', 'OR', 'AND'];
 
 /* ---------------------------------------------------------------- *
  * Discourse words
  * ---------------------------------------------------------------- */
 
-/* (filled in next step) */
-const DISCOURSE = [];
+/* NO is absent here because it is already in NEGATIVE, where the negation rule
+ * needs it. */
+const DISCOURSE = ['YES', 'MAYBE', 'PROBABLY'];
 
 /* ---------------------------------------------------------------- *
  * Function words the gloss drops
@@ -194,6 +255,40 @@ const PHRASES = [['SIGN', 'LANGUAGE'], ['THANK', 'YOU'], ['GOOD', 'BYE'],
   ['LOOK', 'FOR'], ['FIND', 'OUT'], ['GROW', 'UP'], ['TAKE', 'CARE'],
   ['LOS', 'ANGELES'], ['SAN', 'FRANCISCO']];
 
+/* ---------------------------------------------------------------- *
+ * Known, but not yet signable
+ *
+ * Every word above is vocabulary the rules understand. These 89 of them have
+ * no entry in signs.js yet, so the avatar fingerspells them — and the point of
+ * naming them here is to say that this is a gap in the *animation* data, not a
+ * word that fell through the lexicon by accident. asl.js sets `pending` on
+ * tokens it finds in this list, so a caller can tell "we know this word, the
+ * sign is not built" apart from "we have never heard of this".
+ *
+ * Nothing reads this list to decide whether to fingerspell. That decision stays
+ * with willFingerspell(), which asks signs.js directly — so if this list drifts
+ * out of date the flag stays correct and only the explanation goes stale.
+ *
+ * Where the signs come from: the colours, the seven days and the twelve months
+ * are the obvious next authoring pass, being closed sets with well-documented
+ * forms — that alone is 30 of the 89. Numbers TEN..TWENTY need their own
+ * handshapes rather than digits, since ASL does not build them by counting.
+ * Prune each word from here as its sign lands. */
+const NO_SIGN_YET = [
+  'ADULT', 'ANOTHER', 'ANYONE', 'APRIL', 'AUGUST', 'BELIEVE', 'BLACK',
+  'BLUE', 'BOTH', 'BROWN', 'CONTINUE', 'DECEMBER', 'DESCRIBE', 'EACH',
+  'EIGHTEEN', 'ELEVEN', 'EMPTY', 'ENOUGH', 'EVERYONE', 'FALL', 'FALSE',
+  'FEBRUARY', 'FIFTEEN', 'FLY', 'FOURTEEN', 'FRIDAY', 'FRUIT', 'GRAY',
+  'GREEN', 'GROW', 'HAVE', 'HAVE-TO', 'HIGH', 'HOPE', 'JANUARY', 'JULY',
+  'JUNE', 'KID', 'LAW', 'LOW', 'MARCH', 'MAY', 'MONDAY', 'MUCH', 'NARROW',
+  'NEED-TO', 'NINETEEN', 'NOBODY', 'NOVEMBER', 'OCTOBER', 'ORANGE', 'OTHER',
+  'PINK', 'PLAN', 'PROBABLY', 'PURPLE', 'PUT', 'RED', 'RULE', 'SATURDAY',
+  'SECOND', 'SEPTEMBER', 'SEVENTEEN', 'SIMPLE', 'SIXTEEN', 'SO', 'SOMEONE',
+  'SPRING', 'STAY', 'SUMMER', 'SUNDAY', 'TEN', 'THESE', 'THIRTEEN', 'THOSE',
+  'THURSDAY', 'TRAVEL', 'TUESDAY', 'TWELVE', 'TWENTY', 'VEGETABLE', 'VISIT',
+  'WEDNESDAY', 'WEEKEND', 'WHITE', 'WIDE', 'WINTER', 'WISH', 'YELLOW',
+];
+
 window.SLLEX = {
   PRONOUN, POSSESSIVE, REFLEXIVE, SIGN_FOR, WH, DETERMINERS,
   TIME, DAYS, MONTHS,
@@ -204,6 +299,7 @@ window.SLLEX = {
   CONJUNCTIONS, DISCOURSE,
   ARTICLES, COPULA, DUMMY_AUX, FUTURE_CUE, NEGATIVE, PAST_CUE, YN_STARTERS,
   PHRASES,
+  NO_SIGN_YET,
 };
 
 })();

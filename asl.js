@@ -37,7 +37,15 @@ const REFLEXIVE = L.REFLEXIVE;
 const SIGN_FOR = L.SIGN_FOR;
 const WH = L.WH;
 const TIME = L.TIME;
+const DAYS = L.DAYS;
+const MONTHS = L.MONTHS;
+const DETERMINERS = L.DETERMINERS;
 const NUMBERS = L.NUMBERS;
+const QUANTIFIERS = L.QUANTIFIERS;
+const COLORS = L.COLORS;
+const CONJUNCTIONS = L.CONJUNCTIONS;
+const DISCOURSE = L.DISCOURSE;
+const NO_SIGN_YET = L.NO_SIGN_YET;
 const VERBS = L.VERBS;
 const IRREGULAR_PAST = L.IRREGULAR_PAST;
 const DITRANSITIVE = L.DITRANSITIVE;
@@ -55,7 +63,15 @@ const PHRASES = L.PHRASES;
 
 const isVerb = (w) => VERBS.includes(w);
 const isNoun = (w) => NOUNS.includes(w);
-const isAdj = (w) => ADJECTIVES.includes(w);
+// A colour describes a noun like any other adjective, so it reorders like one.
+const isAdj = (w) => ADJECTIVES.includes(w) || COLORS.includes(w);
+/* Days and months are time signs: they front, and they set the tense, exactly
+ * as TOMORROW and YESTERDAY do. */
+const isTime = (w) => TIME.includes(w) || DAYS.includes(w) || MONTHS.includes(w);
+/* What can sit in front of a noun and has to travel with it when the noun
+ * phrase moves. See the topicalisation rule. */
+const isDeterminer = (w) => DETERMINERS.includes(w) || QUANTIFIERS.includes(w) ||
+  NUMBERS.includes(w);
 
 /* ---------------------------------------------------------------- *
  * Rule engine
@@ -129,7 +145,7 @@ function toGloss(text) {
 
   const hasWh = words.some((w) => WH.includes(w));
   const hasNeg = words.some((w) => NEGATIVE.includes(w));
-  const hasTime = words.some((w) => TIME.includes(w));
+  const hasTime = words.some(isTime);
   // The -ED test is a guess, and it guessed wrong on TIRED, NEED, SCARED,
   // EXCITED and BORED — each a sign in its own right, each turned into a
   // spurious FINISH plus a mangled stem. A word that is a sign is not a tense.
@@ -165,6 +181,10 @@ function toGloss(text) {
     // Set here rather than downstream so the flag is decided while the word's
     // own resolution is in hand, not re-derived from the reordered stream.
     t.fingerspell = willFingerspell(t.sign || t.gloss);
+    /* Known vocabulary whose sign has not been built yet, as opposed to a word
+     * the lexicon has never heard of. Both fingerspell today; only one of them
+     * is a bug. */
+    if (t.fingerspell && NO_SIGN_YET.indexOf(t.sign || t.gloss) >= 0) t.pending = true;
     g.push(t);
     return t;
   };
@@ -226,7 +246,7 @@ function toGloss(text) {
   }
 
   /* -- TIME - TOPIC - COMMENT: time signs move to the front -- */
-  const timeIdx = g.findIndex((t) => TIME.includes(t.gloss));
+  const timeIdx = g.findIndex((t) => isTime(t.gloss));
   if (timeIdx > 0) {
     const [t] = g.splice(timeIdx, 1);
     g.unshift(t);
@@ -282,7 +302,7 @@ function toGloss(text) {
      * adjective this run has just put behind its noun. */
     let last = g.length - 1;
     let first = g[last].postNominal ? last - 1 : last;
-    while (first > 0 && (g[first - 1].poss || NUMBERS.includes(g[first - 1].gloss))) first--;
+    while (first > 0 && (g[first - 1].poss || isDeterminer(g[first - 1].gloss))) first--;
     const obj = g[g[last].postNominal ? last - 1 : last];
     if (PRONOUN[subj.gloss] && isVerb(verb.gloss) && isNoun(obj.gloss) &&
         obj !== verb && first > 1) {
@@ -334,7 +354,9 @@ function isYesNo(words) {
   return words.length > 1 && YN_STARTERS.includes(words[0]);
 }
 
-window.SLASL = { toGloss, TIME, WH, NOUNS, PLACES, VERBS, ADJECTIVES,
-                 PRONOUN, POSSESSIVE, REFLEXIVE, NUMBERS };
+window.SLASL = { toGloss, TIME, DAYS, MONTHS, WH, NOUNS, PLACES, VERBS,
+                 ADJECTIVES, COLORS, PRONOUN, POSSESSIVE, REFLEXIVE,
+                 DETERMINERS, NUMBERS, QUANTIFIERS, CONJUNCTIONS, DISCOURSE,
+                 NO_SIGN_YET };
 
 })();
