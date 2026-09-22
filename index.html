@@ -247,24 +247,12 @@
   .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
   .example { background: var(--accent-soft); color: var(--accent); border: 0; font-size: 13px; padding: 6px 11px; font-weight: 550; }
 
-  #vocab { font-size: 12.5px; color: var(--muted); line-height: 1.9; word-spacing: 2px; }
   .speed { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
   input[type=range] { accent-color: var(--accent); flex: 1; min-width: 120px; }
 
-  .glossbox { border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; background: var(--bg); }
-  .glossrow { display: flex; gap: 10px; align-items: baseline; padding: 3px 0; }
-  .glossrow + .glossrow { border-top: 1px dashed var(--border); }
-  .glosslbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted);
-              min-width: 68px; font-weight: 600; }
-  #gloss { font-weight: 650; letter-spacing: 0.04em; font-size: 14.5px; }
-  .rules { margin: 10px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); }
-  .rules li { margin-bottom: 3px; }
-  .rules b { color: var(--accent); font-weight: 600; }
   .markers { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); }
   .markers li { margin-bottom: 4px; }
   .markers b { color: var(--text); font-weight: 600; }
-  .caveat { font-size: 12.5px; color: var(--muted); border-left: 3px solid var(--border); padding-left: 12px; }
-  .caveat strong { color: var(--text); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -300,25 +288,6 @@
             <span id="speedVal">1.00×</span>
           </label>
         </div>
-      </div>
-
-      <div class="panel">
-        <h2>ASL gloss</h2>
-        <div class="glossbox">
-          <div class="glossrow"><span class="glosslbl">English</span><span id="english">—</span></div>
-          <div class="glossrow"><span class="glosslbl">Gloss</span><span id="gloss">—</span></div>
-        </div>
-        <ul class="rules" id="rules"><li class="muted">Nothing signed yet.</li></ul>
-      </div>
-
-      <div class="panel">
-        <h2>Vocabulary — <span id="vocabCount">0</span> words</h2>
-        <div id="vocab"></div>
-        <p class="caveat" style="margin-top:12px"><strong>Anything not listed is
-        fingerspelled</strong>, which is what ASL does with names — and also what
-        this prototype does with a word whose sign has not been authored, or whose
-        generated sign was found to collide with another word's and was withheld
-        rather than signed wrongly. See <code>audit-signs.js</code>.</p>
       </div>
     </div>
 

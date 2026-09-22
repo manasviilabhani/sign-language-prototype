@@ -149,7 +149,6 @@ function signText(text, { append } = {}) {
   const { tl, tokens } = built;
   state.tokens = tokens;
   renderPlan(tokens);
-  renderGloss(built);
   player.setTimeline(tl);
   player.play();
   $('status').textContent = built.signed ? 'signing…' : 'nothing signable in that input';
@@ -515,33 +514,6 @@ document.querySelectorAll('.example').forEach((b) => {
   });
 });
 
-function renderGloss(built) {
-  $('english').textContent = built.english;
-  $('gloss').textContent = built.tokens.map((t) => t.text).join('  ') +
-    (built.type === 'yn' || built.type === 'wh' ? '  ?' : '');
-  const host = $('rules');
-  host.innerHTML = '';
-  if (!built.trace.length) {
-    host.innerHTML = '<li class="muted">No rewriting needed.</li>';
-    return;
-  }
-  for (const r of built.trace) {
-    const li = document.createElement('li');
-    const b = document.createElement('b');
-    b.textContent = r.rule;
-    li.appendChild(b);
-    li.appendChild(document.createTextNode(' — ' + r.detail));
-    host.appendChild(li);
-  }
-}
-
-/* Vocabulary panel — aliases are listed too, since they are words you can say */
-(function renderVocab() {
-  const names = Object.keys(VOCAB).sort();
-  $('vocab').textContent = names.join(' · ');
-  $('vocabCount').textContent = names.length;
-})();
-
 window.SLApp = { buildTimeline, tokenize, signText, player, toGloss };
 
 setupRecognition();
@@ -558,7 +530,6 @@ $('speedVal').textContent = '1.00×';
   const { tl, tokens } = built;
   state.tokens = tokens;
   renderPlan(tokens);
-  renderGloss(built);
   player.setTimeline(tl);
   const freeze = q.get('t');
   if (freeze !== null) {
